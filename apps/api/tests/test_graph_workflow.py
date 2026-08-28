@@ -65,11 +65,11 @@ def evidence_input(document_id: str) -> dict[str, Any]:
 async def test_document_to_reviewed_graph_workflow(client: TestClient, mcp_server) -> None:
     course = create_course(client)
     document = upload_lecture(client, course["id"])
-    assert document["processingStatus"] == "UPLOADED"
 
-    unprocessed = client.get(f"/courses/{course['id']}/documents").json()
-    assert [item["processingStatus"] for item in unprocessed] == ["UPLOADED"]
-    assert unprocessed[0]["chunkCount"] == 0
+    # Uploading chunks the source in the background; extraction is exercised separately.
+    uploaded = client.get(f"/courses/{course['id']}/documents").json()
+    assert [item["processingStatus"] for item in uploaded] == ["READY"]
+    assert uploaded[0]["chunkCount"] > 0
 
     processed = client.post(
         f"/courses/{course['id']}/documents/{document['id']}/process"

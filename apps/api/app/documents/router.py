@@ -1,11 +1,21 @@
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    status,
+)
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
+from app.extraction.service import extract_document, process_and_extract
 from app.graph.service import SqlCourseGraph
 from app.ingestion.service import DocumentProcessingError, process_document
 from app.models import (
@@ -14,6 +24,7 @@ from app.models import (
     Document,
     DocumentChunk,
     DocumentType,
+    ProcessingStatus,
 )
 from app.schemas import DocumentChunkRead, DocumentGraphRead, DocumentRead
 from app.storage.base import StorageProvider
@@ -37,6 +48,7 @@ def get_storage_provider() -> StorageProvider:
 @router.post("", response_model=DocumentRead, status_code=status.HTTP_201_CREATED)
 def upload_document(
     course_id: str,
+    background_tasks: BackgroundTasks,
     document_type: DocumentType = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -75,6 +87,8 @@ def upload_document(
         storage.delete(storage_path)
         raise
     db.refresh(document)
+    # Chunking and extraction run after the response so a slow agent never blocks the upload.
+    background_tasks.add_task(process_and_extract, document.id, storage)
     return document
 
 
@@ -130,6 +144,27 @@ def process_uploaded_document(
         ) from error
     db.refresh(document)
     return DocumentRead.model_validate({**document.__dict__, "chunk_count": len(chunks)})
+
+
+@router.post("/{document_id}/extract", response_model=DocumentRead)
+def extract_uploaded_document(
+    course_id: str, document_id: str, db: Session = Depends(get_db)
+) -> DocumentRead:
+    """Retry automatic extraction for a document that already has chunks."""
+    document = _get_document(db, course_id, document_id)
+    if document.processing_status != ProcessingStatus.READY:
+        raise HTTPException(
+            status_code=409, detail="Process this source before extracting its graph"
+        )
+    extract_document(db, document)
+    db.refresh(document)
+    chunk_count = (
+        db.scalar(
+            select(func.count(DocumentChunk.id)).where(DocumentChunk.document_id == document_id)
+        )
+        or 0
+    )
+    return DocumentRead.model_validate({**document.__dict__, "chunk_count": chunk_count})
 
 
 @router.get("/{document_id}/graph", response_model=DocumentGraphRead)

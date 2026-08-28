@@ -75,11 +75,13 @@ async def test_document_discovery_metadata_and_source_aware_chunks(
     assert not listed.is_error
     assert not metadata.is_error
     assert not chunks.is_error, chunks.content
-    assert listed.structured_content["documents"][0]["id"] == document["id"]
+    assert [item["id"] for item in listed.structured_content["documents"]] == [document["id"]]
+    assert listed.structured_content["documents"][0]["processing_status"] == "READY"
     assert metadata.structured_content["original_filename"] == "notes.txt"
     assert chunks.structured_content["chunks"][0]["content"].startswith("Trees require")
+    # Uploads are chunked by the ingestion pipeline, which records line-level locations.
     location = chunks.structured_content["chunks"][0]["source_location"]
-    assert location == {"source": "notes.txt", "start_offset": 0, "end_offset": 40}
+    assert location == {"type": "lines", "start": 1, "end": 2}
 
 
 @pytest.mark.anyio
@@ -288,7 +290,8 @@ async def test_processing_success_failure_and_processed_filter(
             },
         )
         unprocessed = await mcp_client.call_tool(
-            "list_course_documents", {"course_id": course["id"]}
+            "list_course_documents",
+            {"course_id": course["id"], "include_processed": False},
         )
 
     assert processed.structured_content["processing_status"] == "READY"

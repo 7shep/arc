@@ -104,6 +104,7 @@ class CourseGraph(Protocol):
     ) -> list[GraphEdge]: ...
     def get_candidate_node(self, course_id: str, node_id: str) -> GraphNode: ...
     def find_approved_node_by_label(self, course_id: str, label: str) -> GraphNode | None: ...
+    def match_approved_node(self, course_id: str, label: str) -> GraphNode | None: ...
     def find_approved_relationship(
         self, course_id: str, source_node_id: str, target_node_id: str, edge_type: GraphEdgeType
     ) -> GraphEdge | None: ...
@@ -764,3 +765,16 @@ class SqlCourseGraph:
             ).all()
         )
         return nodes, relationships
+
+    def match_approved_node(self, course_id: str, label: str) -> GraphNode | None:
+        """Case-insensitive label lookup used to fold re-extracted concepts into one node."""
+        return self.db.scalars(
+            select(GraphNode)
+            .where(
+                GraphNode.course_id == course_id,
+                func.lower(GraphNode.label) == label.strip().lower(),
+                GraphNode.archived_at.is_(None),
+                GraphNode.review_status.in_(APPROVED_REVIEW_STATUSES),
+            )
+            .order_by(GraphNode.created_at)
+        ).first()

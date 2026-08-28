@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     CheckConstraint,
     DateTime,
     Enum,
@@ -40,6 +41,16 @@ class ProcessingStatus(StrEnum):
     PROCESSING = "PROCESSING"
     READY = "READY"
     FAILED = "FAILED"
+
+
+class ExtractionStatus(StrEnum):
+    """Progress of automatic graph extraction for one document."""
+
+    NOT_STARTED = "NOT_STARTED"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    UNAVAILABLE = "UNAVAILABLE"
 
 
 class ReviewStatus(StrEnum):
@@ -116,6 +127,11 @@ class Document(TimestampMixin, Base):
         Enum(ProcessingStatus), default=ProcessingStatus.UPLOADED
     )
     processing_error: Mapped[str | None] = mapped_column(Text)
+    extraction_status: Mapped[ExtractionStatus] = mapped_column(
+        Enum(ExtractionStatus), default=ExtractionStatus.NOT_STARTED, index=True
+    )
+    extraction_error: Mapped[str | None] = mapped_column(Text)
+    extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     course: Mapped[Course] = relationship(back_populates="documents")
     chunks: Mapped[list["DocumentChunk"]] = relationship(
         back_populates="document", cascade="all, delete-orphan"
@@ -245,3 +261,13 @@ class GraphEvidence(Base):
         ),
         CheckConstraint("confidence >= 0 AND confidence <= 1", name="ck_evidence_confidence"),
     )
+
+
+class WorkspaceSettings(TimestampMixin, Base):
+    """Single-row workspace configuration; the graph extraction agent lives here."""
+
+    __tablename__ = "workspace_settings"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default="default")
+    extraction_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    extraction_tool_id: Mapped[str | None] = mapped_column(String(64))
+    extraction_command: Mapped[str | None] = mapped_column(Text)

@@ -3,7 +3,14 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.models import DocumentType, GraphEdgeType, GraphNodeType, ProcessingStatus, ReviewStatus
+from app.models import (
+    DocumentType,
+    ExtractionStatus,
+    GraphEdgeType,
+    GraphNodeType,
+    ProcessingStatus,
+    ReviewStatus,
+)
 
 
 def to_camel(value: str) -> str:
@@ -59,6 +66,9 @@ class DocumentRead(ApiModel):
     storage_path: str
     processing_status: ProcessingStatus
     processing_error: str | None
+    extraction_status: ExtractionStatus = ExtractionStatus.NOT_STARTED
+    extraction_error: str | None = None
+    extracted_at: datetime | None = None
     chunk_count: int = 0
     created_at: datetime
     updated_at: datetime
@@ -357,3 +367,34 @@ class CandidateMergeResult(ApiModel):
     kind: CandidateKind
     target_node: GraphNodeRead | None = None
     target_relationship: GraphEdgeRead | None = None
+
+
+class AgentToolRead(ApiModel):
+    id: str
+    name: str
+    executable: str
+    path: str | None
+    available: bool
+    default_command: str
+    verified: bool
+    docs_url: str
+
+
+class ExtractionSettingsRead(ApiModel):
+    enabled: bool
+    tool_id: str | None
+    command: str | None
+    command_override: str | None
+    tools: list[AgentToolRead]
+
+
+class ExtractionSettingsUpdate(ApiModel):
+    enabled: bool | None = None
+    tool_id: str | None = None
+    command: str | None = Field(default=None, max_length=4_000)
+
+    @model_validator(mode="after")
+    def validate_update(self) -> "ExtractionSettingsUpdate":
+        if not self.model_fields_set:
+            raise ValueError("at least one field is required")
+        return self

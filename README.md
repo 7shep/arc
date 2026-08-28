@@ -13,9 +13,9 @@ Arc is a multi-agent academic knowledge system in its foundation stage. Students
 - Expose reviewable, source-backed graph extraction tools over MCP
 - Review, approve, reject, edit, and merge proposed graph records before they join the graph
 - Explore course metrics, recent uploads, sources, and an interactive graph
-- Review candidates in the workspace with source excerpts, bulk approval, editing, and merging
-- Process sources from the workspace with per-document status, failure reasons, and the approved
-  graph records each source produced
+- Build the course graph automatically on upload by running an agent CLI the user already has
+- Choose that agent, or edit its command, in workspace settings
+- Track per-source progress, failure reasons, and the graph records each source produced
 - Seed a demonstrable MATH221 Vector Calculus graph
 
 ## Architecture
@@ -81,6 +81,7 @@ Open [http://localhost:3000](http://localhost:3000). API documentation is availa
 | `UPLOAD_DIR` | Local source storage root | `./uploads` |
 | `MAX_UPLOAD_SIZE_MB` | Per-file upload limit | `25` |
 | `WEB_ORIGIN` | Allowed browser origin for CORS | `http://localhost:3000` |
+| `ARC_AUTO_EXTRACT` | Run the extraction agent after an upload | `1` |
 | `NEXT_PUBLIC_API_URL` | API URL used by the frontend | `http://localhost:8000` |
 
 Run checks from the repository root:
@@ -103,19 +104,35 @@ cd apps/api
 ARC_TEST_DATABASE_URL=postgresql+psycopg://arc:arc@localhost:5432/arc python -m pytest
 ```
 
-## Graph building workflow
+## Automatic graph building
 
 ```text
-upload document → process document → source-aware chunks → chunks over MCP →
-candidate nodes and relationships → review → approve or reject → approved course graph → graph view
+upload document → chunk it → Arc spawns your agent CLI → the agent reads chunks over MCP →
+nodes and relationships with evidence → course graph → graph view
 ```
 
-The workspace Sources section shows which documents remain unprocessed, processes them on demand,
-reports the failure reason when extraction fails, and lists the approved graph records each source
-produced. Reprocessing a document replaces its chunks instead of duplicating them, and a candidate
-that duplicates approved knowledge cannot be approved twice — merge it instead.
+Uploading a source is the only step a user takes. Arc chunks the file in the background, then runs
+an AI coding agent **you already have installed and signed in** — Claude Code, Codex, Gemini CLI,
+OpenCode, or Cursor Agent — against its own MCP server. Arc holds no API key and no model
+credentials; the model usage is billed to whoever runs Arc, through their existing subscription.
+
+Pick the agent, or edit the command Arc runs, at `/settings`. Arc detects which CLIs are on `PATH`
+and substitutes `{prompt}` and `{mcp_config}` into the command template.
+
+Extraction writes straight into the course graph. A concept the agent has already recorded is
+reused rather than duplicated, so re-reading a source or covering the same topic across several
+lectures folds into one node with evidence from every document. Every node and relationship keeps
+the excerpt, page or section, and document it came from.
+
+If no agent is installed, or the agent fails, the document keeps its chunks and the source row
+explains why with a retry. Nothing invented ever enters the graph.
+
+The candidate review API remains for callers that want a human gate; set `ARC_AUTO_APPROVE` off for
+an MCP client and its writes wait for review instead.
 
 - `POST /courses/{course_id}/documents/{document_id}/process`
+- `POST /courses/{course_id}/documents/{document_id}/extract` to retry graph building
+- `GET|PUT /settings/extraction` to detect and choose the agent CLI
 - `GET /courses/{course_id}/documents/{document_id}/chunks`
 - `GET /courses/{course_id}/documents/{document_id}/graph` for the records a source produced
 
@@ -134,8 +151,9 @@ tables. Active graph records can be authored and retrieved with these course-sco
 
 ### Candidate review
 
-Extracted records enter the graph with a `PENDING` review status and are invisible to graph
-visualization, counts, search, and traversal until a reviewer approves them. Review statuses are
+Automatic extraction approves as it writes. The review API below is what remains for MCP clients
+run with `ARC_AUTO_APPROVE` unset, whose records are invisible to graph visualization, counts,
+search, and traversal until approved. Review statuses are
 `PENDING`, `APPROVED`, `REJECTED`, `EDITED`, and `MERGED`.
 
 - `GET /courses/{course_id}/graph/review/candidates?documentId={document_id}`

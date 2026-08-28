@@ -1,3 +1,4 @@
+import os
 from collections.abc import Callable
 from functools import wraps
 from typing import Annotated, Any, Literal
@@ -53,6 +54,11 @@ def _handle_tool_errors(function: Callable[..., Any]) -> Callable[..., Any]:
     return wrapped
 
 
+def auto_approve_enabled() -> bool:
+    """Arc runs the extraction agent itself, so its writes go straight into the course graph."""
+    return os.getenv("ARC_AUTO_APPROVE", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _default_storage() -> StorageProvider:
     return LocalStorageProvider(get_settings().upload_dir)
 
@@ -91,9 +97,9 @@ def create_mcp_server(
     @server.tool()
     @_handle_tool_errors
     def list_course_documents(
-        course_id: UUID, include_processed: bool = False
+        course_id: UUID, include_processed: bool = True
     ) -> DocumentListResult:
-        """List uploaded/unprocessed course documents, optionally including processed sources."""
+        """List course documents, optionally limited to sources that still need processing."""
         with session_factory() as db:
             documents = DocumentService(db, storage_factory()).list_documents(
                 str(course_id), include_processed=include_processed
@@ -147,7 +153,7 @@ def create_mcp_server(
         metadata: dict[str, Any] | None = None,
     ) -> CandidateNodeResult:
         """Create an evidence-backed candidate node that remains pending human review."""
-        label = label.strip()
+        label = " ".join(label.split())
         excerpt = excerpt.strip()
         if not label or len(label) > 255:
             raise ToolError("label must contain 1 to 255 characters")
@@ -162,15 +168,22 @@ def create_mcp_server(
             documents = DocumentService(db, storage_factory())
             documents.get_document(str(course_id), str(document_id))
             graph = graph_factory(db)
-            node = graph.create_node(
-                str(course_id),
-                node_type,
-                label,
-                description=description,
-                confidence=confidence,
-                review_status=ReviewStatus.PENDING,
-                node_metadata=metadata or {},
-            )
+            approved = auto_approve_enabled()
+            node = graph.match_approved_node(str(course_id), label) if approved else None
+            if node is None:
+                node = graph.create_node(
+                    str(course_id),
+                    node_type,
+                    label,
+                    description=description,
+                    confidence=confidence,
+                    review_status=(
+                        ReviewStatus.APPROVED if approved else ReviewStatus.PENDING
+                    ),
+                    node_metadata=metadata or {},
+                )
+            elif description and not node.description:
+                node.description = description
             evidence = graph.attach_evidence(
                 str(course_id),
                 "node",
@@ -214,15 +227,29 @@ def create_mcp_server(
         location = source_location.model_dump(exclude_none=True)
         with session_factory() as db:
             graph = graph_factory(db)
-            edge = graph.create_edge(
-                str(course_id),
-                str(source_node_id),
-                str(target_node_id),
-                relationship_type,
-                confidence=confidence,
-                review_status=ReviewStatus.PENDING,
-                edge_metadata=metadata or {},
+            approved = auto_approve_enabled()
+            edge = (
+                graph.find_approved_relationship(
+                    str(course_id),
+                    str(source_node_id),
+                    str(target_node_id),
+                    relationship_type,
+                )
+                if approved
+                else None
             )
+            if edge is None:
+                edge = graph.create_edge(
+                    str(course_id),
+                    str(source_node_id),
+                    str(target_node_id),
+                    relationship_type,
+                    confidence=confidence,
+                    review_status=(
+                        ReviewStatus.APPROVED if approved else ReviewStatus.PENDING
+                    ),
+                    edge_metadata=metadata or {},
+                )
             evidence = graph.attach_evidence(
                 str(course_id),
                 "relationship",
@@ -270,7 +297,7 @@ def create_mcp_server(
             )
             if target is None or target.course_id != str(course_id):
                 raise GraphValidationError(f"Evidence {target_type} not found in course")
-            if target.review_status not in REVIEWABLE_STATUSES:
+            if target.review_status not in REVIEWABLE_STATUSES and not auto_approve_enabled():
                 raise GraphValidationError(
                     "Evidence can only be attached to records awaiting review"
                 )
