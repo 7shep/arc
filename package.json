@@ -1,0 +1,11 @@
+{
+  "name": "arc",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "dev": "pnpm --filter @arc/web dev",
+    "build": "pnpm --filter @arc/web build",
+    "lint": "pnpm --filter @arc/web lint",
+    "typecheck": "pnpm --filter @arc/web typecheck"
+  }
+}

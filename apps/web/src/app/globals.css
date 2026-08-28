@@ -1,0 +1,39 @@
+@import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
+
+:root {
+  --ink: #171a18;
+  --muted: #68716b;
+  --line: #dce2dd;
+  --paper: #f7f9f7;
+  --surface: #ffffff;
+  --accent: #087a55;
+  --accent-strong: #066345;
+}
+
+* { box-sizing: border-box; }
+html { background: var(--paper); }
+body { margin: 0; color: var(--ink); background: var(--paper); }
+button, input, select, textarea { font: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
+button:active, a[role="button"]:active { transform: translateY(1px); }
+::selection { background: #bcebd8; }
+
+.focus-ring:focus-visible {
+  outline: 3px solid rgba(8, 122, 85, 0.3);
+  outline-offset: 2px;
+}
+
+.graph-grid {
+  background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.react-flow__attribution { display: none; }
+.react-flow__controls { border: 1px solid var(--line); box-shadow: none; }
+.react-flow__controls-button { border-bottom-color: var(--line); background: var(--surface); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
+}
+

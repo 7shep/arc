@@ -1,0 +1,2 @@
+import Link from "next/link";
+export default function NotFound() { return <main className="grid min-h-[100dvh] place-items-center p-6 text-center"><div><p className="font-mono text-sm text-[var(--accent)]">404</p><h1 className="mt-3 text-3xl font-semibold tracking-[-0.04em]">Course not found</h1><p className="mt-2 text-[var(--muted)]">This workspace may have been removed.</p><Link href="/" className="focus-ring mt-6 inline-flex h-11 items-center bg-[var(--ink)] px-4 text-sm font-medium text-white">Return to courses</Link></div></main>; }
