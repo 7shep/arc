@@ -23,6 +23,8 @@ Arc is a course knowledge system. The current repository is the foundation: cour
 - Validate uploaded extension, MIME type, filename, and configured size limit.
 - Store only generated filenames and relative storage paths; never trust a client path.
 - Keep migrations/schema changes reflected in models, seed data, tests, and docs.
+- A change to an existing table needs an idempotent SQL file in `apps/api/migrations`; tests
+  bootstrap SQLite from metadata and will not catch a missing migration.
 - Keep UI copy direct and functional. Use the existing neutral palette and emerald accent; avoid decorative gradients, glass effects, and nested cards.
 - Include loading, empty, and error behavior for new user-visible data flows.
 - Do not commit `.env`, uploaded course files, database volumes, caches, or build artifacts.

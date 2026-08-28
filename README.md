@@ -59,6 +59,7 @@ Prerequisites: Node.js 22+, pnpm 11+, Python 3.12+, Docker with Compose.
    # Windows: .venv\Scripts\activate
    # macOS/Linux: source .venv/bin/activate
    python -m pip install -e ".[dev]"
+   python -m app.migrate   # only needed for a database created before the review workflow
    python -m app.seed
    uvicorn app.main:app --reload --port 8000
    ```
@@ -158,7 +159,9 @@ archives its incident relationships. Node and relationship source evidence uses
 ## Current limitations
 
 - Local storage is development-only and document processing runs synchronously.
-- The initial schema bootstrap uses SQLAlchemy metadata; add Alembic before collaborative deployments.
+- The initial schema bootstrap uses SQLAlchemy metadata. Changes to existing tables ship as
+  idempotent SQL files in `apps/api/migrations`, applied with `python -m app.migrate` (also run by
+  `python -m app.seed`). Adopt Alembic before collaborative deployments.
 - There is no authentication, authorization, object storage, background work, search, or agent runtime.
 
 ## Planned components
