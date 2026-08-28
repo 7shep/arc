@@ -2,11 +2,15 @@ from sqlalchemy import select
 
 from app.database import Base, SessionLocal, engine
 from app.graph.service import SqlCourseGraph
+from app.migrate import migrate
 from app.models import Course, GraphEdgeType, GraphNodeType
 
 
 def seed() -> None:
     Base.metadata.create_all(engine)
+    if engine.dialect.name == "postgresql":
+        for name in migrate(engine):
+            print(f"Applied migration: {name}")
     with SessionLocal() as db:
         existing = db.scalar(select(Course).where(Course.code == "MATH221"))
         if existing:
