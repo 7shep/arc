@@ -20,6 +20,14 @@ Graph records live in PostgreSQL initially because Arc already needs transaction
 
 Graphify should enter as an extraction or graph-adapter integration. It may produce normalized node and edge proposals, but Arc's domain types and `CourseGraph` remain the stable boundary. This lets Arc validate types, provenance, and course ownership before persistence.
 
+## MCP extraction boundary
+
+The stdio MCP server is a transport adapter over `DocumentService` and `CourseGraph`. It validates
+UUIDs, graph enums, course ownership, structured source locations, and confidence before invoking
+those application boundaries. It never queries a table or reads storage directly. MCP graph writes
+are always `CANDIDATE` records and are committed atomically with a `GraphEvidence` row; review and
+approval remain separate application concerns.
+
 ## Future multi-agent architecture
 
 ```mermaid

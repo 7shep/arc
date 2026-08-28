@@ -3,7 +3,18 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Enum, Float, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -27,6 +38,12 @@ class ProcessingStatus(StrEnum):
     PROCESSING = "PROCESSING"
     PROCESSED = "PROCESSED"
     FAILED = "FAILED"
+
+
+class ReviewStatus(StrEnum):
+    CANDIDATE = "CANDIDATE"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
 
 
 class GraphNodeType(StrEnum):
@@ -81,7 +98,24 @@ class Document(TimestampMixin, Base):
     processing_status: Mapped[ProcessingStatus] = mapped_column(
         Enum(ProcessingStatus), default=ProcessingStatus.UPLOADED
     )
+    processing_error: Mapped[str | None] = mapped_column(Text)
     course: Mapped[Course] = relationship(back_populates="documents")
+
+
+class DocumentChunk(Base):
+    __tablename__ = "document_chunks"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id", ondelete="CASCADE"), index=True)
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
+    sequence: Mapped[int] = mapped_column(Integer)
+    content: Mapped[str] = mapped_column(Text)
+    source_location: Mapped[dict[str, Any]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    __table_args__ = (
+        UniqueConstraint("document_id", "sequence", name="uq_document_chunk_sequence"),
+    )
 
 
 class GraphNode(TimestampMixin, Base):
@@ -95,6 +129,10 @@ class GraphNode(TimestampMixin, Base):
         ForeignKey("documents.id", ondelete="SET NULL")
     )
     source_location: Mapped[str | None] = mapped_column(String(255))
+    confidence: Mapped[float | None] = mapped_column(Float)
+    review_status: Mapped[ReviewStatus] = mapped_column(
+        Enum(ReviewStatus), default=ReviewStatus.APPROVED
+    )
     node_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
     course: Mapped[Course] = relationship(back_populates="nodes")
     __table_args__ = (UniqueConstraint("course_id", "label", name="uq_course_node_label"),)
@@ -108,6 +146,36 @@ class GraphEdge(Base):
     target_node_id: Mapped[str] = mapped_column(ForeignKey("graph_nodes.id", ondelete="CASCADE"))
     type: Mapped[GraphEdgeType] = mapped_column(Enum(GraphEdgeType))
     confidence: Mapped[float | None] = mapped_column(Float)
+    review_status: Mapped[ReviewStatus] = mapped_column(
+        Enum(ReviewStatus), default=ReviewStatus.APPROVED
+    )
     edge_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     course: Mapped[Course] = relationship(back_populates="edges")
+
+
+class GraphEvidence(Base):
+    __tablename__ = "graph_evidence"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id", ondelete="CASCADE"), index=True)
+    graph_node_id: Mapped[str | None] = mapped_column(
+        ForeignKey("graph_nodes.id", ondelete="CASCADE"), index=True
+    )
+    graph_edge_id: Mapped[str | None] = mapped_column(
+        ForeignKey("graph_edges.id", ondelete="CASCADE"), index=True
+    )
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
+    source_location: Mapped[dict[str, Any]] = mapped_column(JSON)
+    excerpt: Mapped[str] = mapped_column(Text)
+    confidence: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    __table_args__ = (
+        CheckConstraint(
+            "(graph_node_id IS NOT NULL AND graph_edge_id IS NULL) OR "
+            "(graph_node_id IS NULL AND graph_edge_id IS NOT NULL)",
+            name="ck_graph_evidence_one_target",
+        ),
+        CheckConstraint("confidence >= 0 AND confidence <= 1", name="ck_evidence_confidence"),
+    )

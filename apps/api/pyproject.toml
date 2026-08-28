@@ -12,8 +12,12 @@ dependencies = [
   "uvicorn[standard]>=0.35,<1",
   "sqlalchemy>=2.0.40,<3",
   "psycopg[binary]>=3.2,<4",
-  "python-multipart>=0.0.20,<1"
+  "python-multipart>=0.0.20,<1",
+  "mcp>=2,<3"
 ]
+
+[project.scripts]
+arc-mcp = "app.mcp.server:main"
 
 [project.optional-dependencies]
 dev = [
