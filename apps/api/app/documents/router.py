@@ -6,8 +6,10 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
-from app.models import Course, Document, DocumentType
-from app.schemas import DocumentRead
+from app.ingestion.service import DocumentProcessingError, process_document
+from app.models import Course, Document, DocumentChunk, DocumentType
+from app.schemas import DocumentChunkRead, DocumentRead
+from app.storage.base import StorageProvider
 from app.storage.local import LocalStorageProvider
 
 router = APIRouter(prefix="/courses/{course_id}/documents", tags=["documents"])
@@ -19,6 +21,10 @@ ALLOWED_MIME_TYPES = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/octet-stream",
 }
+
+
+def get_storage_provider() -> StorageProvider:
+    return LocalStorageProvider(get_settings().upload_dir)
 
 
 @router.post("", response_model=DocumentRead, status_code=status.HTTP_201_CREATED)
@@ -44,7 +50,7 @@ def upload_document(
         raise HTTPException(
             status_code=413, detail=f"File exceeds {settings.max_upload_size_mb} MB"
         )
-    storage = LocalStorageProvider(settings.upload_dir)
+    storage = get_storage_provider()
     storage_path = storage.save(file.file, original_name)
     document = Document(
         course_id=course_id,
@@ -74,5 +80,49 @@ def list_documents(course_id: str, db: Session = Depends(get_db)) -> list[Docume
             select(Document)
             .where(Document.course_id == course_id)
             .order_by(Document.created_at.desc())
+        ).all()
+    )
+
+
+def _get_document(db: Session, course_id: str, document_id: str) -> Document:
+    document = db.scalar(
+        select(Document).where(Document.id == document_id, Document.course_id == course_id)
+    )
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return document
+
+
+@router.post("/{document_id}/process", response_model=DocumentRead)
+def process_uploaded_document(
+    course_id: str,
+    document_id: str,
+    db: Session = Depends(get_db),
+    storage: StorageProvider = Depends(get_storage_provider),
+) -> Document:
+    document = _get_document(db, course_id, document_id)
+    try:
+        process_document(db, storage, document)
+    except DocumentProcessingError as error:
+        raise HTTPException(
+            status_code=422, detail=f"Document processing failed: {error}"
+        ) from error
+    db.refresh(document)
+    return document
+
+
+@router.get("/{document_id}/chunks", response_model=list[DocumentChunkRead])
+def list_document_chunks(
+    course_id: str, document_id: str, db: Session = Depends(get_db)
+) -> list[DocumentChunk]:
+    _get_document(db, course_id, document_id)
+    return list(
+        db.scalars(
+            select(DocumentChunk)
+            .where(
+                DocumentChunk.document_id == document_id,
+                DocumentChunk.course_id == course_id,
+            )
+            .order_by(DocumentChunk.sequence)
         ).all()
     )
