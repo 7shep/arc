@@ -6,6 +6,7 @@
     "dev": "pnpm --filter @arc/web dev",
     "build": "pnpm --filter @arc/web build",
     "lint": "pnpm --filter @arc/web lint",
-    "typecheck": "pnpm --filter @arc/web typecheck"
+    "typecheck": "pnpm --filter @arc/web typecheck",
+    "test": "pnpm --filter @arc/web test"
   }
 }

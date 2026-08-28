@@ -51,6 +51,8 @@ export interface CourseDocument {
   updatedAt: string;
 }
 
+export type ReviewStatus = "PENDING" | "APPROVED" | "REJECTED" | "EDITED" | "MERGED";
+
 export interface GraphNode {
   id: string;
   courseId: string;
@@ -59,6 +61,8 @@ export interface GraphNode {
   description: string | null;
   sourceDocumentId: string | null;
   sourceLocation: string | null;
+  confidence: number | null;
+  reviewStatus: ReviewStatus;
   metadata: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -71,6 +75,7 @@ export interface GraphEdge {
   targetNodeId: string;
   type: GraphEdgeType;
   confidence: number | null;
+  reviewStatus: ReviewStatus;
   sourceDocumentId: string | null;
   sourceLocation: string | null;
   metadata: Record<string, unknown>;
@@ -79,3 +84,76 @@ export interface GraphEdge {
 }
 
 export interface CourseGraph { nodes: GraphNode[]; edges: GraphEdge[] }
+
+export interface CandidateEvidence {
+  id: string;
+  documentId: string;
+  documentName: string;
+  documentType: DocumentType;
+  page: number | null;
+  section: string | null;
+  sourceLocation: Record<string, unknown>;
+  excerpt: string;
+  confidence: number;
+  createdAt: string;
+}
+
+interface CandidateBase {
+  id: string;
+  courseId: string;
+  confidence: number | null;
+  reviewStatus: ReviewStatus;
+  reviewNote: string | null;
+  reviewedAt: string | null;
+  sourceDocumentId: string | null;
+  sourceDocumentName: string | null;
+  metadata: Record<string, unknown>;
+  evidenceCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CandidateNode extends CandidateBase {
+  kind: "node";
+  type: GraphNodeType;
+  label: string;
+  description: string | null;
+  mergedIntoNodeId: string | null;
+}
+
+export interface CandidateRelationship extends CandidateBase {
+  kind: "relationship";
+  type: GraphEdgeType;
+  sourceNodeId: string;
+  targetNodeId: string;
+  sourceNodeLabel: string | null;
+  targetNodeLabel: string | null;
+  mergedIntoEdgeId: string | null;
+}
+
+export type Candidate = CandidateNode | CandidateRelationship;
+
+export interface CandidateQueue {
+  pendingCount: number;
+  nodes: CandidateNode[];
+  relationships: CandidateRelationship[];
+}
+
+export interface CandidateDetail<T extends Candidate = Candidate> {
+  candidate: T;
+  evidence: CandidateEvidence[];
+  relatedNodes: GraphNode[];
+}
+
+export interface BulkApproveResult {
+  approvedNodeIds: string[];
+  approvedRelationshipIds: string[];
+  failures: { id: string; kind: "node" | "relationship"; reason: string }[];
+}
+
+export interface CandidateMergeResult {
+  candidateId: string;
+  kind: "node" | "relationship";
+  targetNode: GraphNode | null;
+  targetRelationship: GraphEdge | null;
+}

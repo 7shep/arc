@@ -8,11 +8,11 @@ export default async function CoursePage({ params }: { params: Promise<{ id: str
   const { id } = await params;
   let data;
   try {
-    data = await Promise.all([api.course(id), api.documents(id), api.graph(id)]);
+    data = await Promise.all([api.course(id), api.documents(id), api.graph(id), api.candidates(id)]);
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) notFound();
     throw error;
   }
-  const [course, documents, graph] = data;
-  return <Workspace initialCourse={course} initialDocuments={documents} graph={graph} />;
+  const [course, documents, graph, queue] = data;
+  return <Workspace initialCourse={course} initialDocuments={documents} initialGraph={graph} initialQueue={queue} />;
 }

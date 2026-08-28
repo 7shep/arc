@@ -13,6 +13,7 @@ Arc is a multi-agent academic knowledge system in its foundation stage. Students
 - Expose reviewable, source-backed graph extraction tools over MCP
 - Review, approve, reject, edit, and merge proposed graph records before they join the graph
 - Explore course metrics, recent uploads, sources, and an interactive graph
+- Review candidates in the workspace with source excerpts, bulk approval, editing, and merging
 - Seed a demonstrable MATH221 Vector Calculus graph
 
 ## Architecture
@@ -84,6 +85,7 @@ Run checks from the repository root:
 ```bash
 pnpm lint
 pnpm typecheck
+pnpm test
 pnpm build
 cd apps/api
 python -m pytest
