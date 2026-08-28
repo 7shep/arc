@@ -1,4 +1,4 @@
 # Ingestion boundary
 
-Future document parsing and knowledge extraction will live here. It will read stored documents through the storage contract and write graph entities through `CourseGraph`.
+Format-specific document parsing lives here. It reads stored PDF, Markdown, plain-text, and Word documents through the storage contract and replaces source-aware SQL chunks transactionally. Future knowledge extraction should consume these chunks and write graph entities through `CourseGraph`.
 

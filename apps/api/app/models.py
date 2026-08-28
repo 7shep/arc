@@ -3,7 +3,17 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Enum, Float, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -25,7 +35,7 @@ class DocumentType(StrEnum):
 class ProcessingStatus(StrEnum):
     UPLOADED = "UPLOADED"
     PROCESSING = "PROCESSING"
-    PROCESSED = "PROCESSED"
+    READY = "READY"
     FAILED = "FAILED"
 
 
@@ -82,6 +92,27 @@ class Document(TimestampMixin, Base):
         Enum(ProcessingStatus), default=ProcessingStatus.UPLOADED
     )
     course: Mapped[Course] = relationship(back_populates="documents")
+    chunks: Mapped[list["DocumentChunk"]] = relationship(
+        back_populates="document", cascade="all, delete-orphan"
+    )
+
+
+class DocumentChunk(TimestampMixin, Base):
+    __tablename__ = "document_chunks"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id", ondelete="CASCADE"), index=True)
+    content: Mapped[str] = mapped_column(Text)
+    sequence: Mapped[int] = mapped_column(Integer)
+    page_number: Mapped[int | None] = mapped_column(Integer)
+    section: Mapped[str | None] = mapped_column(String(500))
+    source_location: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    document: Mapped[Document] = relationship(back_populates="chunks")
+    __table_args__ = (
+        UniqueConstraint("document_id", "sequence", name="uq_document_chunk_sequence"),
+    )
 
 
 class GraphNode(TimestampMixin, Base):

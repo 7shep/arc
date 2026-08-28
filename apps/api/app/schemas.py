@@ -62,6 +62,19 @@ class DocumentRead(ApiModel):
     updated_at: datetime
 
 
+class DocumentChunkRead(ApiModel):
+    id: str
+    document_id: str
+    course_id: str
+    content: str
+    sequence: int
+    page_number: int | None
+    section: str | None
+    source_location: dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
+
+
 class GraphNodeRead(ApiModel):
     id: str
     course_id: str
