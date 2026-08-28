@@ -13,9 +13,13 @@ dependencies = [
   "sqlalchemy>=2.0.40,<3",
   "psycopg[binary]>=3.2,<4",
   "python-multipart>=0.0.20,<1",
+  "mcp>=2,<3",
   "pypdf>=6.0,<7",
   "python-docx>=1.2,<2"
 ]
+
+[project.scripts]
+arc-mcp = "app.mcp.server:main"
 
 [project.optional-dependencies]
 dev = [

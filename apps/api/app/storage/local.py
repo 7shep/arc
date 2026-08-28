@@ -6,7 +6,7 @@ from typing import BinaryIO
 
 class LocalStorageProvider:
     def __init__(self, root: Path) -> None:
-        self.root = root
+        self.root = root.resolve()
         self.root.mkdir(parents=True, exist_ok=True)
 
     def save(self, stream: BinaryIO, filename: str) -> str:

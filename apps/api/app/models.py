@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy import (
     JSON,
+    CheckConstraint,
     DateTime,
     Enum,
     Float,
@@ -37,6 +38,12 @@ class ProcessingStatus(StrEnum):
     PROCESSING = "PROCESSING"
     READY = "READY"
     FAILED = "FAILED"
+
+
+class ReviewStatus(StrEnum):
+    CANDIDATE = "CANDIDATE"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
 
 
 class GraphNodeType(StrEnum):
@@ -91,6 +98,7 @@ class Document(TimestampMixin, Base):
     processing_status: Mapped[ProcessingStatus] = mapped_column(
         Enum(ProcessingStatus), default=ProcessingStatus.UPLOADED
     )
+    processing_error: Mapped[str | None] = mapped_column(Text)
     course: Mapped[Course] = relationship(back_populates="documents")
     chunks: Mapped[list["DocumentChunk"]] = relationship(
         back_populates="document", cascade="all, delete-orphan"
@@ -126,6 +134,10 @@ class GraphNode(TimestampMixin, Base):
         ForeignKey("documents.id", ondelete="SET NULL")
     )
     source_location: Mapped[str | None] = mapped_column(String(255))
+    confidence: Mapped[float | None] = mapped_column(Float)
+    review_status: Mapped[ReviewStatus] = mapped_column(
+        Enum(ReviewStatus), default=ReviewStatus.APPROVED
+    )
     node_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     course: Mapped[Course] = relationship(back_populates="nodes")
@@ -140,6 +152,9 @@ class GraphEdge(TimestampMixin, Base):
     target_node_id: Mapped[str] = mapped_column(ForeignKey("graph_nodes.id", ondelete="CASCADE"))
     type: Mapped[GraphEdgeType] = mapped_column(Enum(GraphEdgeType))
     confidence: Mapped[float | None] = mapped_column(Float)
+    review_status: Mapped[ReviewStatus] = mapped_column(
+        Enum(ReviewStatus), default=ReviewStatus.APPROVED
+    )
     source_document_id: Mapped[str | None] = mapped_column(
         ForeignKey("documents.id", ondelete="SET NULL")
     )
@@ -151,4 +166,31 @@ class GraphEdge(TimestampMixin, Base):
         UniqueConstraint(
             "course_id", "source_node_id", "target_node_id", "type", name="uq_course_graph_edge"
         ),
+    )
+
+
+class GraphEvidence(Base):
+    __tablename__ = "graph_evidence"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id", ondelete="CASCADE"), index=True)
+    graph_node_id: Mapped[str | None] = mapped_column(
+        ForeignKey("graph_nodes.id", ondelete="CASCADE"), index=True
+    )
+    graph_edge_id: Mapped[str | None] = mapped_column(
+        ForeignKey("graph_edges.id", ondelete="CASCADE"), index=True
+    )
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
+    source_location: Mapped[dict[str, Any]] = mapped_column(JSON)
+    excerpt: Mapped[str] = mapped_column(Text)
+    confidence: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    __table_args__ = (
+        CheckConstraint(
+            "(graph_node_id IS NOT NULL AND graph_edge_id IS NULL) OR "
+            "(graph_node_id IS NULL AND graph_edge_id IS NOT NULL)",
+            name="ck_graph_evidence_one_target",
+        ),
+        CheckConstraint("confidence >= 0 AND confidence <= 1", name="ck_evidence_confidence"),
     )

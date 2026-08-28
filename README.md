@@ -10,6 +10,7 @@ Arc is a multi-agent academic knowledge system in its foundation stage. Students
 - Store source metadata and processing state in PostgreSQL
 - Query a SQL-backed course graph through an abstract graph service
 - Author, archive, search, and traverse graph records with source-document evidence
+- Expose reviewable, source-backed graph extraction tools over MCP
 - Explore course metrics, recent uploads, sources, and an interactive graph
 - Seed a demonstrable MATH221 Vector Calculus graph
 
@@ -126,3 +127,6 @@ archives its incident relationships. Node and relationship source evidence uses
 3. An agent router with tutor, assignment, and reviewer agents that query the shared graph
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the architectural rationale and [AGENTS.md](AGENTS.md) for contributor guidance.
+
+The external extraction tool names and their input/output schemas are documented in
+[docs/MCP_TOOLS.md](docs/MCP_TOOLS.md).

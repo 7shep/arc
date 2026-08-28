@@ -1,4 +1,5 @@
-from typing import Any, Protocol
+import json
+from typing import Any, Literal, Protocol
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -9,21 +10,26 @@ from app.models import (
     Document,
     GraphEdge,
     GraphEdgeType,
+    GraphEvidence,
     GraphNode,
     GraphNodeType,
     utcnow,
 )
 
 
-class GraphRecordNotFound(Exception):
+class GraphValidationError(ValueError):
     pass
 
 
-class InvalidGraphReference(Exception):
+class GraphRecordNotFound(GraphValidationError):
     pass
 
 
-class DuplicateGraphRecord(Exception):
+class InvalidGraphReference(GraphValidationError):
+    pass
+
+
+class DuplicateGraphRecord(GraphValidationError):
     pass
 
 
@@ -51,6 +57,18 @@ class CourseGraph(Protocol):
         edge_type: GraphEdgeType,
         **kwargs: Any,
     ) -> GraphEdge: ...
+    def find_node(self, node_id: str) -> GraphNode | None: ...
+    def find_edge(self, edge_id: str) -> GraphEdge | None: ...
+    def attach_evidence(
+        self,
+        course_id: str,
+        target_type: Literal["node", "relationship"],
+        target_id: str,
+        document_id: str,
+        source_location: dict[str, Any],
+        excerpt: str,
+        confidence: float,
+    ) -> GraphEvidence: ...
     def update_relationship(
         self, course_id: str, relationship_id: str, values: dict[str, Any]
     ) -> GraphEdge: ...
@@ -232,6 +250,47 @@ class SqlCourseGraph:
         relationship = self.get_relationship(course_id, relationship_id)
         relationship.archived_at = utcnow()
         self.db.flush()
+
+    def find_node(self, node_id: str) -> GraphNode | None:
+        return self.db.get(GraphNode, node_id)
+
+    def find_edge(self, edge_id: str) -> GraphEdge | None:
+        return self.db.get(GraphEdge, edge_id)
+
+    def attach_evidence(
+        self,
+        course_id: str,
+        target_type: Literal["node", "relationship"],
+        target_id: str,
+        document_id: str,
+        source_location: dict[str, Any],
+        excerpt: str,
+        confidence: float,
+    ) -> GraphEvidence:
+        document = self.db.get(Document, document_id)
+        if document is None or document.course_id != course_id:
+            raise GraphValidationError("Evidence document not found in course")
+        node = self.find_node(target_id) if target_type == "node" else None
+        edge = self.find_edge(target_id) if target_type == "relationship" else None
+        target = node or edge
+        if target is None or target.course_id != course_id:
+            raise GraphValidationError(f"Evidence {target_type} not found in course")
+        evidence = GraphEvidence(
+            course_id=course_id,
+            graph_node_id=node.id if node else None,
+            graph_edge_id=edge.id if edge else None,
+            document_id=document_id,
+            source_location=source_location,
+            excerpt=excerpt,
+            confidence=confidence,
+        )
+        target.confidence = confidence
+        if node is not None and node.source_document_id is None:
+            node.source_document_id = document_id
+            node.source_location = json.dumps(source_location, separators=(",", ":"))[:255]
+        self.db.add(evidence)
+        self.db.flush()
+        return evidence
 
     def get_neighbors(
         self, course_id: str, node_id: str

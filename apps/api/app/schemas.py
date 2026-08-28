@@ -3,7 +3,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.models import DocumentType, GraphEdgeType, GraphNodeType, ProcessingStatus
+from app.models import DocumentType, GraphEdgeType, GraphNodeType, ProcessingStatus, ReviewStatus
 
 
 def to_camel(value: str) -> str:
@@ -58,6 +58,7 @@ class DocumentRead(ApiModel):
     mime_type: str
     storage_path: str
     processing_status: ProcessingStatus
+    processing_error: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -83,6 +84,8 @@ class GraphNodeRead(ApiModel):
     description: str | None
     source_document_id: str | None
     source_location: str | None
+    confidence: float | None
+    review_status: ReviewStatus
     metadata: dict[str, Any] = Field(validation_alias="node_metadata")
     created_at: datetime
     updated_at: datetime
@@ -143,6 +146,7 @@ class GraphEdgeRead(ApiModel):
     target_node_id: str
     type: GraphEdgeType
     confidence: float | None
+    review_status: ReviewStatus
     source_document_id: str | None
     source_location: str | None
     metadata: dict[str, Any] = Field(validation_alias="edge_metadata")
