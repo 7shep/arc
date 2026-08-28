@@ -115,6 +115,9 @@ class CourseGraph(Protocol):
     def merge_relationship(
         self, course_id: str, candidate_id: str, target_id: str
     ) -> GraphEdge: ...
+    def get_document_records(
+        self, course_id: str, document_id: str
+    ) -> tuple[list[GraphNode], list[GraphEdge]]: ...
 
 
 class SqlCourseGraph:
@@ -718,3 +721,46 @@ class SqlCourseGraph:
                 GraphEdge.review_status.in_(APPROVED_REVIEW_STATUSES),
             )
         )
+
+    def get_document_records(
+        self, course_id: str, document_id: str
+    ) -> tuple[list[GraphNode], list[GraphEdge]]:
+        """Return the approved graph records that a document is the evidence for."""
+        self.ensure_course(course_id)
+        node_ids = select(GraphEvidence.graph_node_id).where(
+            GraphEvidence.course_id == course_id, GraphEvidence.document_id == document_id
+        )
+        edge_ids = select(GraphEvidence.graph_edge_id).where(
+            GraphEvidence.course_id == course_id, GraphEvidence.document_id == document_id
+        )
+        nodes = list(
+            self.db.scalars(
+                select(GraphNode)
+                .where(
+                    GraphNode.course_id == course_id,
+                    GraphNode.archived_at.is_(None),
+                    GraphNode.review_status.in_(APPROVED_REVIEW_STATUSES),
+                    or_(
+                        GraphNode.id.in_(node_ids),
+                        GraphNode.source_document_id == document_id,
+                    ),
+                )
+                .order_by(GraphNode.created_at, GraphNode.id)
+            ).all()
+        )
+        relationships = list(
+            self.db.scalars(
+                select(GraphEdge)
+                .where(
+                    GraphEdge.course_id == course_id,
+                    GraphEdge.archived_at.is_(None),
+                    GraphEdge.review_status.in_(APPROVED_REVIEW_STATUSES),
+                    or_(
+                        GraphEdge.id.in_(edge_ids),
+                        GraphEdge.source_document_id == document_id,
+                    ),
+                )
+                .order_by(GraphEdge.created_at, GraphEdge.id)
+            ).all()
+        )
+        return nodes, relationships

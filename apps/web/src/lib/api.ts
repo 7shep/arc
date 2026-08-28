@@ -7,6 +7,7 @@ import type {
   Course,
   CourseDocument,
   CourseGraph,
+  DocumentGraph,
 } from "@arc/shared";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -45,6 +46,8 @@ export const api = {
   graph: (id: string) => request<CourseGraph>(`/courses/${id}/graph`),
   createCourse: (data: { name: string; code: string; description?: string }) => request<Course>("/courses", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }),
   uploadDocument: (id: string, form: FormData) => request<CourseDocument>(`/courses/${id}/documents`, { method: "POST", body: form }),
+  processDocument: (id: string, documentId: string) => send<CourseDocument>(`/courses/${id}/documents/${documentId}/process`, "POST"),
+  documentGraph: (id: string, documentId: string) => request<DocumentGraph>(`/courses/${id}/documents/${documentId}/graph`),
   candidates: (id: string) => request<CandidateQueue>(`${reviewPath(id)}/candidates`),
   nodeCandidate: (id: string, nodeId: string) => request<CandidateDetail<CandidateNode>>(`${reviewPath(id)}/candidates/nodes/${nodeId}`),
   relationshipCandidate: (id: string, relationshipId: string) => request<CandidateDetail<CandidateRelationship>>(`${reviewPath(id)}/candidates/relationships/${relationshipId}`),

@@ -39,6 +39,15 @@ guarantees for labels and relationships apply to approved records alone. Review 
 its dependent candidate relationships without touching approved data, and merging moves evidence,
 relationships, and extraction metadata onto the approved record so provenance survives.
 
+## Graph building workflow
+
+Document ingestion, the MCP extraction tools, the review service, and the workspace form one loop:
+a stored source is chunked with its page and section locations, an external extractor reads those
+chunks over MCP and writes evidence-backed candidates, a reviewer promotes or discards them, and
+only then does the record appear in the course graph. Every stage is idempotent: reprocessing
+replaces a document's chunks, and approval refuses a candidate that duplicates approved knowledge
+so the same source can be re-extracted safely.
+
 ## Future multi-agent architecture
 
 ```mermaid

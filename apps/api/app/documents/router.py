@@ -1,14 +1,21 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
+from app.graph.service import SqlCourseGraph
 from app.ingestion.service import DocumentProcessingError, process_document
-from app.models import Course, Document, DocumentChunk, DocumentType
-from app.schemas import DocumentChunkRead, DocumentRead
+from app.models import (
+    REVIEWABLE_STATUSES,
+    Course,
+    Document,
+    DocumentChunk,
+    DocumentType,
+)
+from app.schemas import DocumentChunkRead, DocumentGraphRead, DocumentRead
 from app.storage.base import StorageProvider
 from app.storage.local import LocalStorageProvider
 
@@ -71,17 +78,31 @@ def upload_document(
     return document
 
 
+def _chunk_counts(db: Session, course_id: str) -> dict[str, int]:
+    rows = db.execute(
+        select(DocumentChunk.document_id, func.count(DocumentChunk.id))
+        .where(DocumentChunk.course_id == course_id)
+        .group_by(DocumentChunk.document_id)
+    ).all()
+    return {document_id: count for document_id, count in rows}
+
+
 @router.get("", response_model=list[DocumentRead])
-def list_documents(course_id: str, db: Session = Depends(get_db)) -> list[Document]:
+def list_documents(course_id: str, db: Session = Depends(get_db)) -> list[DocumentRead]:
     if not db.get(Course, course_id):
         raise HTTPException(status_code=404, detail="Course not found")
-    return list(
-        db.scalars(
-            select(Document)
-            .where(Document.course_id == course_id)
-            .order_by(Document.created_at.desc())
-        ).all()
-    )
+    documents = db.scalars(
+        select(Document)
+        .where(Document.course_id == course_id)
+        .order_by(Document.created_at.desc())
+    ).all()
+    counts = _chunk_counts(db, course_id)
+    return [
+        DocumentRead.model_validate(
+            {**document.__dict__, "chunk_count": counts.get(document.id, 0)}
+        )
+        for document in documents
+    ]
 
 
 def _get_document(db: Session, course_id: str, document_id: str) -> Document:
@@ -99,16 +120,52 @@ def process_uploaded_document(
     document_id: str,
     db: Session = Depends(get_db),
     storage: StorageProvider = Depends(get_storage_provider),
-) -> Document:
+) -> DocumentRead:
     document = _get_document(db, course_id, document_id)
     try:
-        process_document(db, storage, document)
+        chunks = process_document(db, storage, document)
     except DocumentProcessingError as error:
         raise HTTPException(
             status_code=422, detail=f"Document processing failed: {error}"
         ) from error
     db.refresh(document)
-    return document
+    return DocumentRead.model_validate({**document.__dict__, "chunk_count": len(chunks)})
+
+
+@router.get("/{document_id}/graph", response_model=DocumentGraphRead)
+def get_document_graph(
+    course_id: str, document_id: str, db: Session = Depends(get_db)
+) -> DocumentGraphRead:
+    """Approved graph records this document is the evidence for, plus its review backlog."""
+    _get_document(db, course_id, document_id)
+    graph = SqlCourseGraph(db)
+    nodes, relationships = graph.get_document_records(course_id, document_id)
+    pending = len(
+        graph.list_candidate_nodes(
+            course_id, statuses=REVIEWABLE_STATUSES, document_id=document_id
+        )
+    ) + len(
+        graph.list_candidate_relationships(
+            course_id, statuses=REVIEWABLE_STATUSES, document_id=document_id
+        )
+    )
+    chunk_count = (
+        db.scalar(
+            select(func.count(DocumentChunk.id)).where(
+                DocumentChunk.document_id == document_id
+            )
+        )
+        or 0
+    )
+    return DocumentGraphRead.model_validate(
+        {
+            "document_id": document_id,
+            "nodes": nodes,
+            "edges": relationships,
+            "chunk_count": chunk_count,
+            "pending_candidate_count": pending,
+        }
+    )
 
 
 @router.get("/{document_id}/chunks", response_model=list[DocumentChunkRead])

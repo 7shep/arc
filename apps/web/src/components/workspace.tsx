@@ -8,6 +8,7 @@ import { FormEvent, useCallback, useState } from "react";
 import { api } from "@/lib/api";
 import { Brand } from "./brand";
 import { CourseGraph as GraphView } from "./course-graph";
+import { CourseSources } from "./course-sources";
 import { GraphReview } from "./graph-review";
 
 type Tab = "overview" | "sources" | "graph" | "review";
@@ -24,6 +25,11 @@ export function Workspace({ initialCourse, initialDocuments, initialGraph, initi
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [uploadOpen, setUploadOpen] = useState(false);
+
+  const handleDocumentProcessed = useCallback(async (processed: CourseDocument) => {
+    setDocuments((items) => items.map((item) => (item.id === processed.id ? processed : item)));
+    setPendingCount((await api.candidates(initialCourse.id)).pendingCount);
+  }, [initialCourse.id]);
 
   const handleReviewed = useCallback(async (queue: CandidateQueue) => {
     setPendingCount(queue.pendingCount);
@@ -53,7 +59,7 @@ export function Workspace({ initialCourse, initialDocuments, initialGraph, initi
 
       {tab === "sources" && <section className="py-8"><div className="mb-6 flex flex-wrap items-center justify-between gap-4"><div><h2 className="text-xl font-semibold tracking-[-0.03em]">Course sources</h2><p className="mt-1 text-sm text-[var(--muted)]">PDF, Markdown, text, or Word. Up to 25 MB.</p></div><div className="flex flex-wrap items-center gap-3"><button onClick={() => setTab("review")} className="focus-ring inline-flex h-10 items-center gap-2 border border-[var(--line)] bg-white px-4 text-sm font-medium"><ClipboardText size={17} /> Review candidates{pendingCount > 0 && ` (${pendingCount})`}</button><button onClick={() => setUploadOpen((value) => !value)} className="focus-ring inline-flex h-10 items-center gap-2 bg-[var(--ink)] px-4 text-sm font-medium text-white"><FileArrowUp size={17} /> Upload source</button></div></div>
         {uploadOpen && <form onSubmit={upload} className="mb-6 grid gap-4 border-l-2 border-[var(--accent)] bg-white p-5 sm:grid-cols-[1fr_220px_auto] sm:items-end"><label className="text-sm font-medium">File<input required name="file" type="file" accept=".pdf,.md,.txt,.docx" className="focus-ring mt-2 block h-11 w-full border border-[var(--line)] bg-[var(--paper)] text-sm file:mr-3 file:h-full file:border-0 file:border-r file:border-[var(--line)] file:bg-white file:px-3 file:font-medium" /></label><label className="text-sm font-medium">Document type<select name="document_type" defaultValue="LECTURE" className="focus-ring mt-2 h-11 w-full border border-[var(--line)] bg-[var(--paper)] px-3">{DOCUMENT_TYPES.map((type) => <option key={type}>{type}</option>)}</select></label><button disabled={uploading} className="focus-ring h-11 bg-[var(--accent)] px-5 text-sm font-medium text-white disabled:opacity-60">{uploading ? "Uploading..." : "Add source"}</button>{uploadError && <p role="alert" className="text-sm text-red-700 sm:col-span-3">{uploadError}</p>}</form>}
-        <DocumentList documents={documents} empty="No sources uploaded. Add lecture notes, readings, assignments, or tutorials." />
+        <CourseSources courseId={initialCourse.id} documents={documents} onDocumentProcessed={handleDocumentProcessed} />
       </section>}
 
       {tab === "graph" && <section className="py-8"><div className="mb-6 flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-xl font-semibold tracking-[-0.03em]">Course graph</h2><p className="mt-1 text-sm text-[var(--muted)]">Drag nodes and use the controls to inspect relationships. Only approved knowledge appears here.</p></div><button onClick={() => setTab("review")} className="focus-ring inline-flex h-10 items-center gap-2 border border-[var(--line)] bg-white px-4 text-sm font-medium"><ClipboardText size={17} /> Review candidates{pendingCount > 0 && ` (${pendingCount})`}</button></div>{graph.nodes.length ? <GraphView graph={graph} /> : <div className="grid min-h-[440px] place-items-center border border-dashed border-[#bec8c1] bg-white p-8 text-center"><div><Graph size={34} className="mx-auto mb-4 text-[var(--accent)]" /><h3 className="font-semibold">No course graph yet.</h3><p className="mt-2 max-w-sm text-sm leading-6 text-[var(--muted)]">Arc will build connections between concepts, lectures, assignments, and source material here.</p></div></div>}</section>}

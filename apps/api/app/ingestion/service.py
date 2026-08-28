@@ -161,6 +161,7 @@ def extract_chunks(stream: BinaryIO, extension: str) -> list[ExtractedChunk]:
 
 def start_processing(db: Session, document: Document) -> None:
     document.processing_status = ProcessingStatus.PROCESSING
+    document.processing_error = None
     db.commit()
 
 
@@ -182,15 +183,17 @@ def complete_processing(
     ]
     db.add_all(chunks)
     document.processing_status = ProcessingStatus.READY
+    document.processing_error = None
     db.commit()
     for chunk in chunks:
         db.refresh(chunk)
     return chunks
 
 
-def fail_processing(db: Session, document: Document) -> None:
+def fail_processing(db: Session, document: Document, reason: str) -> None:
     db.rollback()
     document.processing_status = ProcessingStatus.FAILED
+    document.processing_error = reason[:2_000]
     db.commit()
 
 
@@ -204,5 +207,5 @@ def process_document(
             extracted_chunks = extract_chunks(stream, extension)
         return complete_processing(db, document, extracted_chunks)
     except Exception as error:
-        fail_processing(db, document)
+        fail_processing(db, document, str(error))
         raise DocumentProcessingError(str(error)) from error

@@ -14,6 +14,8 @@ Arc is a multi-agent academic knowledge system in its foundation stage. Students
 - Review, approve, reject, edit, and merge proposed graph records before they join the graph
 - Explore course metrics, recent uploads, sources, and an interactive graph
 - Review candidates in the workspace with source excerpts, bulk approval, editing, and merging
+- Process sources from the workspace with per-document status, failure reasons, and the approved
+  graph records each source produced
 - Seed a demonstrable MATH221 Vector Calculus graph
 
 ## Architecture
@@ -99,6 +101,22 @@ service, set `ARC_TEST_DATABASE_URL` for the test process:
 cd apps/api
 ARC_TEST_DATABASE_URL=postgresql+psycopg://arc:arc@localhost:5432/arc python -m pytest
 ```
+
+## Graph building workflow
+
+```text
+upload document → process document → source-aware chunks → chunks over MCP →
+candidate nodes and relationships → review → approve or reject → approved course graph → graph view
+```
+
+The workspace Sources section shows which documents remain unprocessed, processes them on demand,
+reports the failure reason when extraction fails, and lists the approved graph records each source
+produced. Reprocessing a document replaces its chunks instead of duplicating them, and a candidate
+that duplicates approved knowledge cannot be approved twice — merge it instead.
+
+- `POST /courses/{course_id}/documents/{document_id}/process`
+- `GET /courses/{course_id}/documents/{document_id}/chunks`
+- `GET /courses/{course_id}/documents/{document_id}/graph` for the records a source produced
 
 ## Graph API
 

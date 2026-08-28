@@ -59,6 +59,7 @@ class DocumentRead(ApiModel):
     storage_path: str
     processing_status: ProcessingStatus
     processing_error: str | None
+    chunk_count: int = 0
     created_at: datetime
     updated_at: datetime
 
@@ -195,6 +196,12 @@ class GraphRead(ApiModel):
 
 class GraphNeighborhoodRead(GraphRead):
     center_node_id: str
+
+
+class DocumentGraphRead(GraphRead):
+    document_id: str
+    chunk_count: int
+    pending_candidate_count: int
 
 
 CandidateKind = Literal["node", "relationship"]
