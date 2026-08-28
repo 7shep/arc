@@ -263,7 +263,7 @@ async def test_invalid_graph_data_and_cross_course_nodes(
     assert invalid_confidence.is_error
     assert invalid_relationship_type.is_error
     assert crossed.is_error
-    assert "must belong to the course" in crossed.content[0].text
+    assert "must be active nodes in this course" in crossed.content[0].text
 
 
 @pytest.mark.anyio
@@ -291,7 +291,7 @@ async def test_processing_success_failure_and_processed_filter(
             "list_course_documents", {"course_id": course["id"]}
         )
 
-    assert processed.structured_content["processing_status"] == "PROCESSED"
+    assert processed.structured_content["processing_status"] == "READY"
     assert failure.structured_content["processing_status"] == "FAILED"
     assert failure.structured_content["processing_error"] == "Parser rejected malformed source"
     assert [item["id"] for item in unprocessed.structured_content["documents"]] == [failed["id"]]

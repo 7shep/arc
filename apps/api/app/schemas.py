@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models import DocumentType, GraphEdgeType, GraphNodeType, ProcessingStatus, ReviewStatus
 
@@ -63,6 +63,19 @@ class DocumentRead(ApiModel):
     updated_at: datetime
 
 
+class DocumentChunkRead(ApiModel):
+    id: str
+    document_id: str
+    course_id: str
+    content: str
+    sequence: int
+    page_number: int | None
+    section: str | None
+    source_location: dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
+
+
 class GraphNodeRead(ApiModel):
     id: str
     course_id: str
@@ -78,6 +91,54 @@ class GraphNodeRead(ApiModel):
     updated_at: datetime
 
 
+class GraphNodeCreate(ApiModel):
+    type: GraphNodeType
+    label: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=10_000)
+    source_document_id: str | None = None
+    source_location: str | None = Field(default=None, max_length=255)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("label")
+    @classmethod
+    def strip_label(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("must not be blank")
+        return value
+
+    @model_validator(mode="after")
+    def validate_source(self) -> "GraphNodeCreate":
+        if self.source_location and not self.source_document_id:
+            raise ValueError("sourceDocumentId is required when sourceLocation is provided")
+        return self
+
+
+class GraphNodeUpdate(ApiModel):
+    type: GraphNodeType | None = None
+    label: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=10_000)
+    source_document_id: str | None = None
+    source_location: str | None = Field(default=None, max_length=255)
+    metadata: dict[str, Any] | None = None
+
+    @field_validator("label")
+    @classmethod
+    def strip_label(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        value = value.strip()
+        if not value:
+            raise ValueError("must not be blank")
+        return value
+
+    @model_validator(mode="after")
+    def validate_update(self) -> "GraphNodeUpdate":
+        if not self.model_fields_set:
+            raise ValueError("at least one field is required")
+        return self
+
+
 class GraphEdgeRead(ApiModel):
     id: str
     course_id: str
@@ -86,10 +147,51 @@ class GraphEdgeRead(ApiModel):
     type: GraphEdgeType
     confidence: float | None
     review_status: ReviewStatus
+    source_document_id: str | None
+    source_location: str | None
     metadata: dict[str, Any] = Field(validation_alias="edge_metadata")
     created_at: datetime
+    updated_at: datetime
+
+
+class GraphRelationshipCreate(ApiModel):
+    source_node_id: str
+    target_node_id: str
+    type: GraphEdgeType
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    source_document_id: str | None = None
+    source_location: str | None = Field(default=None, max_length=255)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_relationship(self) -> "GraphRelationshipCreate":
+        if self.source_node_id == self.target_node_id:
+            raise ValueError("sourceNodeId and targetNodeId must be different")
+        if self.source_location and not self.source_document_id:
+            raise ValueError("sourceDocumentId is required when sourceLocation is provided")
+        return self
+
+
+class GraphRelationshipUpdate(ApiModel):
+    source_node_id: str | None = None
+    target_node_id: str | None = None
+    type: GraphEdgeType | None = None
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    source_document_id: str | None = None
+    source_location: str | None = Field(default=None, max_length=255)
+    metadata: dict[str, Any] | None = None
+
+    @model_validator(mode="after")
+    def validate_update(self) -> "GraphRelationshipUpdate":
+        if not self.model_fields_set:
+            raise ValueError("at least one field is required")
+        return self
 
 
 class GraphRead(ApiModel):
     nodes: list[GraphNodeRead]
     edges: list[GraphEdgeRead]
+
+
+class GraphNeighborhoodRead(GraphRead):
+    center_node_id: str

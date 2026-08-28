@@ -8,13 +8,13 @@ Document upload is deliberately small: the document route validates the request,
 
 ## Graph abstraction
 
-`CourseGraph` defines node creation, edge creation, lookup, neighborhood traversal, and search. Current endpoints and the seed use the SQL implementation. Future ingestion and agent code should depend on this interface, which prevents Graphify or any graph database SDK from spreading through the codebase.
+`CourseGraph` defines node creation, edge creation, lookup, neighborhood traversal, and search. Current endpoints and the seed use the SQL implementation. Future knowledge extraction and agent code should depend on this interface, which prevents Graphify or any graph database SDK from spreading through the codebase.
 
 Graph records live in PostgreSQL initially because Arc already needs transactional relational storage for courses and documents. At this stage, graph volume and traversal depth do not justify a second datastore. Keeping one operational dependency makes local development, backups, and consistency simpler. If traversal requirements later exceed SQL's fit, the graph implementation can change without changing its consumers.
 
 ## Storage abstraction
 
-`StorageProvider` exposes `save`, `get`, and `delete`. `LocalStorageProvider` generates safe filenames beneath a configured root and is suitable for development. An S3 or R2 provider can later implement the same contract. Database records store provider-relative paths, not machine-specific absolute paths.
+`StorageProvider` exposes `save`, `open`, `get`, and `delete`. Ingestion opens source bytes through this contract rather than accessing upload paths directly. `LocalStorageProvider` generates safe filenames beneath a configured root and is suitable for development. An S3 or R2 provider can later implement the same contract. Database records store provider-relative paths, not machine-specific absolute paths.
 
 ## Future Graphify integration
 
@@ -44,4 +44,4 @@ flowchart TD
     Reviewer --> Graph
 ```
 
-Ingestion will read files through storage, extract content with explicit provenance, and write through the graph service. Agents will query the shared graph on demand rather than receiving every course file in their context. The `ingestion` and `agents` directories currently contain boundary documentation only so the initial foundation does not imply capabilities it does not have.
+Ingestion reads files through storage and persists ordered chunks with explicit provenance. Future knowledge extraction will consume those chunks and write through the graph service. Agents will query the shared graph on demand rather than receiving every course file in their context. The `agents` directory remains a reserved boundary so the foundation does not imply capabilities it does not have.

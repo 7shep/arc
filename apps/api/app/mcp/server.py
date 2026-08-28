@@ -264,9 +264,9 @@ def create_mcp_server(
         with session_factory() as db:
             graph = graph_factory(db)
             target = (
-                graph.get_node(str(target_id))
+                graph.find_node(str(target_id))
                 if target_type == "node"
-                else graph.get_edge(str(target_id))
+                else graph.find_edge(str(target_id))
             )
             if target is None or target.course_id != str(course_id):
                 raise GraphValidationError(f"Evidence {target_type} not found in course")

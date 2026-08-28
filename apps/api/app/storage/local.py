@@ -25,3 +25,6 @@ class LocalStorageProvider:
         if self.root not in path.parents:
             raise ValueError("Invalid storage path")
         return path
+
+    def open(self, storage_path: str) -> BinaryIO:
+        return self.get(storage_path).open("rb")

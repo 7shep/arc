@@ -36,7 +36,7 @@ class DocumentService:
         self.require_course(course_id)
         query = select(Document).where(Document.course_id == course_id)
         if not include_processed:
-            query = query.where(Document.processing_status != ProcessingStatus.PROCESSED)
+            query = query.where(Document.processing_status != ProcessingStatus.READY)
         return list(self.db.scalars(query.order_by(Document.created_at)).all())
 
     def get_document(self, course_id: str, document_id: str) -> Document:
@@ -89,7 +89,7 @@ class DocumentService:
 
     def mark_processed(self, course_id: str, document_id: str) -> Document:
         document = self.get_document(course_id, document_id)
-        document.processing_status = ProcessingStatus.PROCESSED
+        document.processing_status = ProcessingStatus.READY
         document.processing_error = None
         self.db.flush()
         return document

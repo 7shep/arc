@@ -1,13 +1,15 @@
 # Arc
 
-Arc is a multi-agent academic knowledge system in its foundation stage. Students can create course workspaces, upload source material, and inspect a structured course graph. Automated ingestion and agents are intentionally not implemented yet.
+Arc is a multi-agent academic knowledge system in its foundation stage. Students can create course workspaces, upload and process source material, and inspect a structured course graph. Knowledge extraction and agents are not implemented yet.
 
 ## Current MVP
 
 - Create and list courses
 - Upload `.pdf`, `.md`, `.txt`, and `.docx` sources to local storage
+- Process uploaded sources into ordered, source-aware document chunks
 - Store source metadata and processing state in PostgreSQL
 - Query a SQL-backed course graph through an abstract graph service
+- Author, archive, search, and traverse graph records with source-document evidence
 - Expose reviewable, source-backed graph extraction tools over MCP
 - Explore course metrics, recent uploads, sources, and an interactive graph
 - Seed a demonstrable MATH221 Vector Calculus graph
@@ -26,8 +28,9 @@ flowchart LR
     Courses --> PG[(PostgreSQL)]
     Documents --> PG
     SQL --> PG
-    Ingestion[Future ingestion] -.-> Storage
-    Ingestion -.-> Graph
+    Documents --> Ingestion[Document ingestion]
+    Ingestion --> Storage
+    Ingestion --> PG
     Agents[Future agents] -.-> Graph
 ```
 
@@ -86,16 +89,40 @@ python -m pytest
 python -m ruff check .
 ```
 
+The API tests use SQLite by default. To run the same suite against the Compose PostgreSQL
+service, set `ARC_TEST_DATABASE_URL` for the test process:
+
+```bash
+cd apps/api
+ARC_TEST_DATABASE_URL=postgresql+psycopg://arc:arc@localhost:5432/arc python -m pytest
+```
+
+## Graph API
+
+Graph persistence is available only through `CourseGraph`; route modules do not query graph
+tables. Active graph records can be authored and retrieved with these course-scoped endpoints:
+
+- `POST /courses/{course_id}/graph/nodes`
+- `GET|PATCH|DELETE /courses/{course_id}/graph/nodes/{node_id}`
+- `GET /courses/{course_id}/graph/nodes/search?q={query}`
+- `GET /courses/{course_id}/graph/nodes/{node_id}/neighbors`
+- `POST /courses/{course_id}/graph/relationships`
+- `GET|PATCH|DELETE /courses/{course_id}/graph/relationships/{relationship_id}`
+- `GET /courses/{course_id}/graph` for visualization data
+
+`DELETE` archives a graph record instead of physically deleting it. Archiving a node also
+archives its incident relationships. Node and relationship source evidence uses
+`sourceDocumentId` and `sourceLocation`; the document must belong to the same course.
+
 ## Current limitations
 
-- Local storage is development-only and uploaded content is not parsed.
-- Graph nodes and edges must be created programmatically or by the seed script.
+- Local storage is development-only and document processing runs synchronously.
 - The initial schema bootstrap uses SQLAlchemy metadata; add Alembic before collaborative deployments.
 - There is no authentication, authorization, object storage, background work, search, or agent runtime.
 
 ## Planned components
 
-1. Document ingestion workers and format-specific extraction
+1. Background document processing workers and production object storage
 2. Knowledge extraction that writes through `CourseGraph`
 3. An agent router with tutor, assignment, and reviewer agents that query the shared graph
 

@@ -8,7 +8,7 @@ export const DOCUMENT_TYPES = [
 ] as const;
 
 export type DocumentType = (typeof DOCUMENT_TYPES)[number];
-export type ProcessingStatus = "UPLOADED" | "PROCESSING" | "PROCESSED" | "FAILED";
+export type ProcessingStatus = "UPLOADED" | "PROCESSING" | "READY" | "FAILED";
 export type GraphNodeType =
   | "CONCEPT"
   | "LECTURE"
@@ -71,8 +71,11 @@ export interface GraphEdge {
   targetNodeId: string;
   type: GraphEdgeType;
   confidence: number | null;
+  sourceDocumentId: string | null;
+  sourceLocation: string | null;
   metadata: Record<string, unknown>;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface CourseGraph { nodes: GraphNode[]; edges: GraphEdge[] }
