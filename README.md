@@ -1,11 +1,12 @@
 # Arc
 
-Arc is a multi-agent academic knowledge system in its foundation stage. Students can create course workspaces, upload source material, and inspect a structured course graph. Automated ingestion and agents are intentionally not implemented yet.
+Arc is a multi-agent academic knowledge system in its foundation stage. Students can create course workspaces, upload and process source material, and inspect a structured course graph. Knowledge extraction and agents are not implemented yet.
 
 ## Current MVP
 
 - Create and list courses
 - Upload `.pdf`, `.md`, `.txt`, and `.docx` sources to local storage
+- Process uploaded sources into ordered, source-aware document chunks
 - Store source metadata and processing state in PostgreSQL
 - Query a SQL-backed course graph through an abstract graph service
 - Explore course metrics, recent uploads, sources, and an interactive graph
@@ -25,8 +26,9 @@ flowchart LR
     Courses --> PG[(PostgreSQL)]
     Documents --> PG
     SQL --> PG
-    Ingestion[Future ingestion] -.-> Storage
-    Ingestion -.-> Graph
+    Documents --> Ingestion[Document ingestion]
+    Ingestion --> Storage
+    Ingestion --> PG
     Agents[Future agents] -.-> Graph
 ```
 
@@ -87,14 +89,14 @@ python -m ruff check .
 
 ## Current limitations
 
-- Local storage is development-only and uploaded content is not parsed.
+- Local storage is development-only and document processing runs synchronously.
 - Graph nodes and edges must be created programmatically or by the seed script.
 - The initial schema bootstrap uses SQLAlchemy metadata; add Alembic before collaborative deployments.
 - There is no authentication, authorization, object storage, background work, search, or agent runtime.
 
 ## Planned components
 
-1. Document ingestion workers and format-specific extraction
+1. Background document processing workers and production object storage
 2. Knowledge extraction that writes through `CourseGraph`
 3. An agent router with tutor, assignment, and reviewer agents that query the shared graph
 

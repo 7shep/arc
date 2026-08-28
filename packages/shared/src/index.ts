@@ -8,7 +8,7 @@ export const DOCUMENT_TYPES = [
 ] as const;
 
 export type DocumentType = (typeof DOCUMENT_TYPES)[number];
-export type ProcessingStatus = "UPLOADED" | "PROCESSING" | "PROCESSED" | "FAILED";
+export type ProcessingStatus = "UPLOADED" | "PROCESSING" | "READY" | "FAILED";
 export type GraphNodeType =
   | "CONCEPT"
   | "LECTURE"
