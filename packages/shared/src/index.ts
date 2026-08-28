@@ -71,8 +71,11 @@ export interface GraphEdge {
   targetNodeId: string;
   type: GraphEdgeType;
   confidence: number | null;
+  sourceDocumentId: string | null;
+  sourceLocation: string | null;
   metadata: Record<string, unknown>;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface CourseGraph { nodes: GraphNode[]; edges: GraphEdge[] }

@@ -4,7 +4,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Course, Document, GraphEdge, GraphNode
+from app.graph.service import SqlCourseGraph
+from app.models import Course, Document
 from app.schemas import CourseCreate, CourseRead
 
 router = APIRouter(prefix="/courses", tags=["courses"])
@@ -14,12 +15,7 @@ def course_read(db: Session, course: Course) -> CourseRead:
     document_count = (
         db.scalar(select(func.count(Document.id)).where(Document.course_id == course.id)) or 0
     )
-    node_count = (
-        db.scalar(select(func.count(GraphNode.id)).where(GraphNode.course_id == course.id)) or 0
-    )
-    edge_count = (
-        db.scalar(select(func.count(GraphEdge.id)).where(GraphEdge.course_id == course.id)) or 0
-    )
+    node_count, edge_count = SqlCourseGraph(db).get_counts(course.id)
     return CourseRead.model_validate(
         {
             **course.__dict__,

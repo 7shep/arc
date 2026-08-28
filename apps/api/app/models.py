@@ -96,11 +96,12 @@ class GraphNode(TimestampMixin, Base):
     )
     source_location: Mapped[str | None] = mapped_column(String(255))
     node_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     course: Mapped[Course] = relationship(back_populates="nodes")
     __table_args__ = (UniqueConstraint("course_id", "label", name="uq_course_node_label"),)
 
 
-class GraphEdge(Base):
+class GraphEdge(TimestampMixin, Base):
     __tablename__ = "graph_edges"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     course_id: Mapped[str] = mapped_column(ForeignKey("courses.id", ondelete="CASCADE"), index=True)
@@ -108,6 +109,15 @@ class GraphEdge(Base):
     target_node_id: Mapped[str] = mapped_column(ForeignKey("graph_nodes.id", ondelete="CASCADE"))
     type: Mapped[GraphEdgeType] = mapped_column(Enum(GraphEdgeType))
     confidence: Mapped[float | None] = mapped_column(Float)
+    source_document_id: Mapped[str | None] = mapped_column(
+        ForeignKey("documents.id", ondelete="SET NULL")
+    )
+    source_location: Mapped[str | None] = mapped_column(String(255))
     edge_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     course: Mapped[Course] = relationship(back_populates="edges")
+    __table_args__ = (
+        UniqueConstraint(
+            "course_id", "source_node_id", "target_node_id", "type", name="uq_course_graph_edge"
+        ),
+    )
