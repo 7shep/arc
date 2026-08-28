@@ -25,8 +25,19 @@ Graphify should enter as an extraction or graph-adapter integration. It may prod
 The stdio MCP server is a transport adapter over `DocumentService` and `CourseGraph`. It validates
 UUIDs, graph enums, course ownership, structured source locations, and confidence before invoking
 those application boundaries. It never queries a table or reads storage directly. MCP graph writes
-are always `CANDIDATE` records and are committed atomically with a `GraphEvidence` row; review and
+are always `PENDING` records and are committed atomically with a `GraphEvidence` row; review and
 approval remain separate application concerns.
+
+## Graph review boundary
+
+`app/review` owns the promotion of proposed records into approved course knowledge. Candidates are
+not a second store: they are graph records whose `review_status` is `PENDING` or `EDITED`, so an
+approval promotes the record already carrying its evidence instead of copying data. Only `APPROVED`
+records are returned by visualization, counts, search, and neighbor traversal, and the uniqueness
+guarantees for labels and relationships apply to approved records alone. Review actions call
+`CourseGraph`; the review service never queries a graph table. Rejection archives a candidate and
+its dependent candidate relationships without touching approved data, and merging moves evidence,
+relationships, and extraction metadata onto the approved record so provenance survives.
 
 ## Future multi-agent architecture
 

@@ -11,6 +11,7 @@ Arc is a multi-agent academic knowledge system in its foundation stage. Students
 - Query a SQL-backed course graph through an abstract graph service
 - Author, archive, search, and traverse graph records with source-document evidence
 - Expose reviewable, source-backed graph extraction tools over MCP
+- Review, approve, reject, edit, and merge proposed graph records before they join the graph
 - Explore course metrics, recent uploads, sources, and an interactive graph
 - Seed a demonstrable MATH221 Vector Calculus graph
 
@@ -109,6 +110,26 @@ tables. Active graph records can be authored and retrieved with these course-sco
 - `POST /courses/{course_id}/graph/relationships`
 - `GET|PATCH|DELETE /courses/{course_id}/graph/relationships/{relationship_id}`
 - `GET /courses/{course_id}/graph` for visualization data
+
+### Candidate review
+
+Extracted records enter the graph with a `PENDING` review status and are invisible to graph
+visualization, counts, search, and traversal until a reviewer approves them. Review statuses are
+`PENDING`, `APPROVED`, `REJECTED`, `EDITED`, and `MERGED`.
+
+- `GET /courses/{course_id}/graph/review/candidates?documentId={document_id}`
+- `GET /courses/{course_id}/graph/review/candidates/nodes/{node_id}`
+- `GET /courses/{course_id}/graph/review/candidates/relationships/{relationship_id}`
+- `POST /courses/{course_id}/graph/review/candidates/nodes/{node_id}/approve|reject|merge`
+- `PATCH /courses/{course_id}/graph/review/candidates/nodes/{node_id}`
+- `POST /courses/{course_id}/graph/review/candidates/relationships/{id}/approve|reject|merge`
+- `PATCH /courses/{course_id}/graph/review/candidates/relationships/{relationship_id}`
+- `POST /courses/{course_id}/graph/review/candidates/approve` for bulk approval
+
+Editing a candidate records an `EDITED` status and keeps it in the queue. Rejecting archives the
+candidate and any candidate relationship that depends on it, and never changes approved data.
+Merging folds a candidate into an approved record, moving evidence, extraction metadata, and
+relationships onto it without creating duplicates.
 
 `DELETE` archives a graph record instead of physically deleting it. Archiving a node also
 archives its incident relationships. Node and relationship source evidence uses

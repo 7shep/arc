@@ -12,6 +12,7 @@ Arc is a course knowledge system. The current repository is the foundation: cour
 - `apps/api/app/documents`: document metadata and upload orchestration.
 - `apps/api/app/storage`: storage provider contract and local implementation. Never write uploads directly from a route.
 - `apps/api/app/graph`: graph domain types, interface, SQL-backed implementation, and routes. Call the graph abstraction instead of coupling callers to SQL tables.
+- `apps/api/app/review`: candidate review workflow. Promote candidates through `CourseGraph`; never query graph tables here.
 - `apps/api/app/ingestion` and `apps/api/app/agents`: reserved boundaries. Do not add fake implementations.
 - `packages/shared`: dependency-free shared TypeScript contracts.
 

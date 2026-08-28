@@ -2,7 +2,7 @@
 
 Arc exposes a stdio MCP server for external extraction assistants. Start it from the API virtual
 environment with `arc-mcp` or `python -m app.mcp.server`. The server does not call an AI provider.
-It accepts only evidence-backed graph candidates, stores them as `CANDIDATE`, and provides no tool
+It accepts only evidence-backed graph candidates, stores them as `PENDING`, and provides no tool
 that approves them.
 
 All identifiers use UUID strings. Enum values are the uppercase values below. Unknown IDs and
@@ -102,7 +102,7 @@ Output:
   "node_type": "CONCEPT",
   "label": "Trees",
   "description": null,
-  "review_status": "CANDIDATE",
+  "review_status": "PENDING",
   "confidence": 0.82,
   "evidence": "Evidence"
 }
@@ -122,7 +122,7 @@ document must belong to the course; self-relationships are rejected. Output:
   "source_node_id": "uuid",
   "target_node_id": "uuid",
   "relationship_type": "REQUIRES",
-  "review_status": "CANDIDATE",
+  "review_status": "PENDING",
   "confidence": 0.82,
   "evidence": "Evidence"
 }
