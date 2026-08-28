@@ -10,10 +10,12 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -41,9 +43,19 @@ class ProcessingStatus(StrEnum):
 
 
 class ReviewStatus(StrEnum):
-    CANDIDATE = "CANDIDATE"
+    """Lifecycle of a proposed graph record on its way to approved course knowledge."""
+
+    PENDING = "PENDING"
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
+    EDITED = "EDITED"
+    MERGED = "MERGED"
+
+
+#: Statuses whose records are part of the approved course graph.
+APPROVED_REVIEW_STATUSES = frozenset({ReviewStatus.APPROVED})
+#: Statuses that still sit in the review queue and can be acted on.
+REVIEWABLE_STATUSES = frozenset({ReviewStatus.PENDING, ReviewStatus.EDITED})
 
 
 class GraphNodeType(StrEnum):
@@ -64,6 +76,11 @@ class GraphEdgeType(StrEnum):
     USED_IN = "USED_IN"
     EXAMPLE_OF = "EXAMPLE_OF"
     APPEARS_IN = "APPEARS_IN"
+
+
+#: Uniqueness is enforced only for records that belong to the approved course graph, so
+#: several pending candidates may propose the same label or relationship until review.
+APPROVED_RECORD_PREDICATE = "review_status = 'APPROVED' AND archived_at IS NULL"
 
 
 class TimestampMixin:
@@ -136,12 +153,30 @@ class GraphNode(TimestampMixin, Base):
     source_location: Mapped[str | None] = mapped_column(String(255))
     confidence: Mapped[float | None] = mapped_column(Float)
     review_status: Mapped[ReviewStatus] = mapped_column(
-        Enum(ReviewStatus), default=ReviewStatus.APPROVED
+        Enum(ReviewStatus), default=ReviewStatus.APPROVED, index=True
     )
     node_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
+    review_note: Mapped[str | None] = mapped_column(Text)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    merged_into_node_id: Mapped[str | None] = mapped_column(
+        ForeignKey("graph_nodes.id", ondelete="SET NULL")
+    )
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     course: Mapped[Course] = relationship(back_populates="nodes")
-    __table_args__ = (UniqueConstraint("course_id", "label", name="uq_course_node_label"),)
+    __table_args__ = (
+        CheckConstraint(
+            "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)",
+            name="ck_graph_node_confidence",
+        ),
+        Index(
+            "uq_course_node_label",
+            "course_id",
+            "label",
+            unique=True,
+            sqlite_where=text(APPROVED_RECORD_PREDICATE),
+            postgresql_where=text(APPROVED_RECORD_PREDICATE),
+        ),
+    )
 
 
 class GraphEdge(TimestampMixin, Base):
@@ -153,18 +188,34 @@ class GraphEdge(TimestampMixin, Base):
     type: Mapped[GraphEdgeType] = mapped_column(Enum(GraphEdgeType))
     confidence: Mapped[float | None] = mapped_column(Float)
     review_status: Mapped[ReviewStatus] = mapped_column(
-        Enum(ReviewStatus), default=ReviewStatus.APPROVED
+        Enum(ReviewStatus), default=ReviewStatus.APPROVED, index=True
     )
     source_document_id: Mapped[str | None] = mapped_column(
         ForeignKey("documents.id", ondelete="SET NULL")
     )
     source_location: Mapped[str | None] = mapped_column(String(255))
     edge_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
+    review_note: Mapped[str | None] = mapped_column(Text)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    merged_into_edge_id: Mapped[str | None] = mapped_column(
+        ForeignKey("graph_edges.id", ondelete="SET NULL")
+    )
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     course: Mapped[Course] = relationship(back_populates="edges")
     __table_args__ = (
-        UniqueConstraint(
-            "course_id", "source_node_id", "target_node_id", "type", name="uq_course_graph_edge"
+        CheckConstraint(
+            "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)",
+            name="ck_graph_edge_confidence",
+        ),
+        Index(
+            "uq_course_graph_edge",
+            "course_id",
+            "source_node_id",
+            "target_node_id",
+            "type",
+            unique=True,
+            sqlite_where=text(APPROVED_RECORD_PREDICATE),
+            postgresql_where=text(APPROVED_RECORD_PREDICATE),
         ),
     )
 

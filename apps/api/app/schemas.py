@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -195,3 +195,158 @@ class GraphRead(ApiModel):
 
 class GraphNeighborhoodRead(GraphRead):
     center_node_id: str
+
+
+CandidateKind = Literal["node", "relationship"]
+
+
+class CandidateEvidenceRead(ApiModel):
+    id: str
+    document_id: str
+    document_name: str
+    document_type: DocumentType
+    page: int | None = None
+    section: str | None = None
+    source_location: dict[str, Any]
+    excerpt: str
+    confidence: float
+    created_at: datetime
+
+
+class CandidateNodeRead(ApiModel):
+    kind: Literal["node"] = "node"
+    id: str
+    course_id: str
+    type: GraphNodeType
+    label: str
+    description: str | None
+    confidence: float | None
+    review_status: ReviewStatus
+    review_note: str | None = None
+    reviewed_at: datetime | None = None
+    merged_into_node_id: str | None = None
+    source_document_id: str | None
+    source_document_name: str | None = None
+    metadata: dict[str, Any]
+    evidence_count: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class CandidateRelationshipRead(ApiModel):
+    kind: Literal["relationship"] = "relationship"
+    id: str
+    course_id: str
+    type: GraphEdgeType
+    source_node_id: str
+    target_node_id: str
+    source_node_label: str | None
+    target_node_label: str | None
+    confidence: float | None
+    review_status: ReviewStatus
+    review_note: str | None = None
+    reviewed_at: datetime | None = None
+    merged_into_edge_id: str | None = None
+    source_document_id: str | None
+    source_document_name: str | None = None
+    metadata: dict[str, Any]
+    evidence_count: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class CandidateQueueRead(ApiModel):
+    pending_count: int
+    nodes: list[CandidateNodeRead]
+    relationships: list[CandidateRelationshipRead]
+
+
+class CandidateNodeDetailRead(ApiModel):
+    candidate: CandidateNodeRead
+    evidence: list[CandidateEvidenceRead]
+    related_nodes: list[GraphNodeRead]
+
+
+class CandidateRelationshipDetailRead(ApiModel):
+    candidate: CandidateRelationshipRead
+    evidence: list[CandidateEvidenceRead]
+    related_nodes: list[GraphNodeRead]
+
+
+class CandidateNodeEdit(ApiModel):
+    type: GraphNodeType | None = None
+    label: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=10_000)
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    metadata: dict[str, Any] | None = None
+
+    @field_validator("label")
+    @classmethod
+    def strip_label(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        value = value.strip()
+        if not value:
+            raise ValueError("must not be blank")
+        return value
+
+    @model_validator(mode="after")
+    def validate_edit(self) -> "CandidateNodeEdit":
+        if not self.model_fields_set:
+            raise ValueError("at least one field is required")
+        return self
+
+
+class CandidateRelationshipEdit(ApiModel):
+    type: GraphEdgeType | None = None
+    source_node_id: str | None = None
+    target_node_id: str | None = None
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    metadata: dict[str, Any] | None = None
+
+    @model_validator(mode="after")
+    def validate_edit(self) -> "CandidateRelationshipEdit":
+        if not self.model_fields_set:
+            raise ValueError("at least one field is required")
+        return self
+
+
+class ReviewDecision(ApiModel):
+    note: str | None = Field(default=None, max_length=2_000)
+
+
+class CandidateMerge(ApiModel):
+    target_id: str = Field(min_length=1)
+    note: str | None = Field(default=None, max_length=2_000)
+
+
+class BulkApproveRequest(ApiModel):
+    node_ids: list[str] = Field(default_factory=list)
+    relationship_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_selection(self) -> "BulkApproveRequest":
+        if not self.node_ids and not self.relationship_ids:
+            raise ValueError("select at least one candidate")
+        if len(self.node_ids) + len(self.relationship_ids) > 100:
+            raise ValueError("approve at most 100 candidates at a time")
+        return self
+
+
+class BulkApproveFailure(ApiModel):
+    id: str
+    kind: CandidateKind
+    reason: str
+
+
+class BulkApproveResult(ApiModel):
+    approved_node_ids: list[str]
+    approved_relationship_ids: list[str]
+    failures: list[BulkApproveFailure]
+
+
+class CandidateMergeResult(ApiModel):
+    candidate_id: str
+    kind: CandidateKind
+    target_node: GraphNodeRead | None = None
+    target_relationship: GraphEdgeRead | None = None

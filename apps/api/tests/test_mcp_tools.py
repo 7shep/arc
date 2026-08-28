@@ -156,13 +156,13 @@ async def test_candidate_node_and_relationship_preserve_provenance(
             },
         )
 
-    assert graph_node.structured_content["review_status"] == "CANDIDATE"
-    assert relationship.structured_content["review_status"] == "CANDIDATE"
+    assert graph_node.structured_content["review_status"] == "PENDING"
+    assert relationship.structured_content["review_status"] == "PENDING"
     assert relationship.structured_content["evidence"]["document_id"] == document["id"]
     assert attached.structured_content["confidence"] == 0.82
     with SessionLocal() as db:
         node = db.get(GraphNode, graph_node.structured_content["id"])
-        assert node.review_status == ReviewStatus.CANDIDATE
+        assert node.review_status == ReviewStatus.PENDING
         assert node.source_document_id == document["id"]
         assert db.query(GraphEvidence).count() == 4
 

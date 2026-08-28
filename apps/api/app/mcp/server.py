@@ -27,7 +27,7 @@ from app.mcp.schemas import (
     EvidenceResult,
     SourceLocation,
 )
-from app.models import GraphEdgeType, GraphNodeType, ReviewStatus
+from app.models import REVIEWABLE_STATUSES, GraphEdgeType, GraphNodeType, ReviewStatus
 from app.storage.base import StorageProvider
 from app.storage.local import LocalStorageProvider
 
@@ -168,7 +168,7 @@ def create_mcp_server(
                 label,
                 description=description,
                 confidence=confidence,
-                review_status=ReviewStatus.CANDIDATE,
+                review_status=ReviewStatus.PENDING,
                 node_metadata=metadata or {},
             )
             evidence = graph.attach_evidence(
@@ -220,7 +220,7 @@ def create_mcp_server(
                 str(target_node_id),
                 relationship_type,
                 confidence=confidence,
-                review_status=ReviewStatus.CANDIDATE,
+                review_status=ReviewStatus.PENDING,
                 edge_metadata=metadata or {},
             )
             evidence = graph.attach_evidence(
@@ -270,8 +270,10 @@ def create_mcp_server(
             )
             if target is None or target.course_id != str(course_id):
                 raise GraphValidationError(f"Evidence {target_type} not found in course")
-            if target.review_status != ReviewStatus.CANDIDATE:
-                raise GraphValidationError("Evidence can only be attached to candidate records")
+            if target.review_status not in REVIEWABLE_STATUSES:
+                raise GraphValidationError(
+                    "Evidence can only be attached to records awaiting review"
+                )
             evidence = graph.attach_evidence(
                 str(course_id),
                 target_type,

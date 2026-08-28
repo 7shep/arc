@@ -1,4 +1,5 @@
 import json
+from collections.abc import Collection
 from typing import Any, Literal, Protocol
 
 from sqlalchemy import func, or_, select
@@ -6,6 +7,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import (
+    APPROVED_REVIEW_STATUSES,
+    REVIEWABLE_STATUSES,
     Course,
     Document,
     GraphEdge,
@@ -13,6 +16,7 @@ from app.models import (
     GraphEvidence,
     GraphNode,
     GraphNodeType,
+    ReviewStatus,
     utcnow,
 )
 
@@ -31,6 +35,10 @@ class InvalidGraphReference(GraphValidationError):
 
 class DuplicateGraphRecord(GraphValidationError):
     pass
+
+
+class InvalidReviewTransition(GraphValidationError):
+    """Raised when a review action does not apply to a record's current review status."""
 
 
 class CourseGraph(Protocol):
@@ -80,6 +88,33 @@ class CourseGraph(Protocol):
     def search_nodes(self, course_id: str, query: str, limit: int = 25) -> list[GraphNode]: ...
     def get_visualization(self, course_id: str) -> tuple[list[GraphNode], list[GraphEdge]]: ...
     def get_counts(self, course_id: str) -> tuple[int, int]: ...
+    def list_candidate_nodes(
+        self,
+        course_id: str,
+        *,
+        statuses: Collection[ReviewStatus] | None = None,
+        document_id: str | None = None,
+    ) -> list[GraphNode]: ...
+    def list_candidate_relationships(
+        self,
+        course_id: str,
+        *,
+        statuses: Collection[ReviewStatus] | None = None,
+        document_id: str | None = None,
+    ) -> list[GraphEdge]: ...
+    def get_candidate_node(self, course_id: str, node_id: str) -> GraphNode: ...
+    def find_approved_node_by_label(self, course_id: str, label: str) -> GraphNode | None: ...
+    def find_approved_relationship(
+        self, course_id: str, source_node_id: str, target_node_id: str, edge_type: GraphEdgeType
+    ) -> GraphEdge | None: ...
+    def get_candidate_relationship(self, course_id: str, relationship_id: str) -> GraphEdge: ...
+    def list_evidence(
+        self, course_id: str, target_type: Literal["node", "relationship"], target_id: str
+    ) -> list[GraphEvidence]: ...
+    def merge_node(self, course_id: str, candidate_id: str, target_id: str) -> GraphNode: ...
+    def merge_relationship(
+        self, course_id: str, candidate_id: str, target_id: str
+    ) -> GraphEdge: ...
 
 
 class SqlCourseGraph:
@@ -303,6 +338,7 @@ class SqlCourseGraph:
                 .where(
                     GraphEdge.course_id == course_id,
                     GraphEdge.archived_at.is_(None),
+                    GraphEdge.review_status.in_(APPROVED_REVIEW_STATUSES),
                     or_(
                         GraphEdge.source_node_id == node_id,
                         GraphEdge.target_node_id == node_id,
@@ -325,6 +361,7 @@ class SqlCourseGraph:
                         GraphNode.course_id == course_id,
                         GraphNode.id.in_(neighbor_ids),
                         GraphNode.archived_at.is_(None),
+                        GraphNode.review_status.in_(APPROVED_REVIEW_STATUSES),
                     )
                     .order_by(GraphNode.label, GraphNode.id)
                 ).all()
@@ -354,6 +391,7 @@ class SqlCourseGraph:
                 .where(
                     GraphNode.course_id == course_id,
                     GraphNode.archived_at.is_(None),
+                    GraphNode.review_status.in_(APPROVED_REVIEW_STATUSES),
                     or_(GraphNode.label.ilike(pattern), GraphNode.description.ilike(pattern)),
                 )
                 .order_by(GraphNode.label, GraphNode.id)
@@ -366,14 +404,22 @@ class SqlCourseGraph:
         nodes = list(
             self.db.scalars(
                 select(GraphNode)
-                .where(GraphNode.course_id == course_id, GraphNode.archived_at.is_(None))
+                .where(
+                    GraphNode.course_id == course_id,
+                    GraphNode.archived_at.is_(None),
+                    GraphNode.review_status.in_(APPROVED_REVIEW_STATUSES),
+                )
                 .order_by(GraphNode.created_at, GraphNode.id)
             ).all()
         )
         relationships = list(
             self.db.scalars(
                 select(GraphEdge)
-                .where(GraphEdge.course_id == course_id, GraphEdge.archived_at.is_(None))
+                .where(
+                    GraphEdge.course_id == course_id,
+                    GraphEdge.archived_at.is_(None),
+                    GraphEdge.review_status.in_(APPROVED_REVIEW_STATUSES),
+                )
                 .order_by(GraphEdge.created_at, GraphEdge.id)
             ).all()
         )
@@ -383,12 +429,292 @@ class SqlCourseGraph:
         self.ensure_course(course_id)
         node_count = self.db.scalar(
             select(func.count(GraphNode.id)).where(
-                GraphNode.course_id == course_id, GraphNode.archived_at.is_(None)
+                GraphNode.course_id == course_id,
+                GraphNode.archived_at.is_(None),
+                GraphNode.review_status.in_(APPROVED_REVIEW_STATUSES),
             )
         ) or 0
         relationship_count = self.db.scalar(
             select(func.count(GraphEdge.id)).where(
-                GraphEdge.course_id == course_id, GraphEdge.archived_at.is_(None)
+                GraphEdge.course_id == course_id,
+                GraphEdge.archived_at.is_(None),
+                GraphEdge.review_status.in_(APPROVED_REVIEW_STATUSES),
             )
         ) or 0
         return node_count, relationship_count
+
+    # Review workflow support. Candidates live in the graph tables with a review status so
+    # approval promotes an existing record instead of copying data between stores.
+
+    def list_candidate_nodes(
+        self,
+        course_id: str,
+        *,
+        statuses: Collection[ReviewStatus] | None = None,
+        document_id: str | None = None,
+    ) -> list[GraphNode]:
+        self.ensure_course(course_id)
+        query = select(GraphNode).where(
+            GraphNode.course_id == course_id,
+            GraphNode.review_status.in_(tuple(statuses or REVIEWABLE_STATUSES)),
+        )
+        if document_id is not None:
+            query = query.where(
+                or_(
+                    GraphNode.source_document_id == document_id,
+                    GraphNode.id.in_(
+                        select(GraphEvidence.graph_node_id).where(
+                            GraphEvidence.document_id == document_id
+                        )
+                    ),
+                )
+            )
+        return list(self.db.scalars(query.order_by(GraphNode.created_at, GraphNode.id)).all())
+
+    def list_candidate_relationships(
+        self,
+        course_id: str,
+        *,
+        statuses: Collection[ReviewStatus] | None = None,
+        document_id: str | None = None,
+    ) -> list[GraphEdge]:
+        self.ensure_course(course_id)
+        query = select(GraphEdge).where(
+            GraphEdge.course_id == course_id,
+            GraphEdge.review_status.in_(tuple(statuses or REVIEWABLE_STATUSES)),
+        )
+        if document_id is not None:
+            query = query.where(
+                or_(
+                    GraphEdge.source_document_id == document_id,
+                    GraphEdge.id.in_(
+                        select(GraphEvidence.graph_edge_id).where(
+                            GraphEvidence.document_id == document_id
+                        )
+                    ),
+                )
+            )
+        return list(self.db.scalars(query.order_by(GraphEdge.created_at, GraphEdge.id)).all())
+
+    def get_candidate_node(self, course_id: str, node_id: str) -> GraphNode:
+        """Return a node in any review status, including rejected and merged history."""
+        self.ensure_course(course_id)
+        node = self.db.scalar(
+            select(GraphNode).where(GraphNode.id == node_id, GraphNode.course_id == course_id)
+        )
+        if not node:
+            raise GraphRecordNotFound("Graph node not found")
+        return node
+
+    def get_candidate_relationship(self, course_id: str, relationship_id: str) -> GraphEdge:
+        self.ensure_course(course_id)
+        relationship = self.db.scalar(
+            select(GraphEdge).where(
+                GraphEdge.id == relationship_id, GraphEdge.course_id == course_id
+            )
+        )
+        if not relationship:
+            raise GraphRecordNotFound("Graph relationship not found")
+        return relationship
+
+    def list_evidence(
+        self, course_id: str, target_type: Literal["node", "relationship"], target_id: str
+    ) -> list[GraphEvidence]:
+        column = (
+            GraphEvidence.graph_node_id if target_type == "node" else GraphEvidence.graph_edge_id
+        )
+        return list(
+            self.db.scalars(
+                select(GraphEvidence)
+                .where(GraphEvidence.course_id == course_id, column == target_id)
+                .order_by(GraphEvidence.created_at, GraphEvidence.id)
+            ).all()
+        )
+
+    def _record_merge_provenance(
+        self, target: GraphNode | GraphEdge, candidate: GraphNode | GraphEdge
+    ) -> None:
+        attribute = "node_metadata" if isinstance(target, GraphNode) else "edge_metadata"
+        candidate_attribute = (
+            "node_metadata" if isinstance(candidate, GraphNode) else "edge_metadata"
+        )
+        metadata = dict(getattr(target, attribute) or {})
+        provenance = dict(metadata.get("provenance") or {})
+        merged = list(provenance.get("mergedCandidates") or [])
+        entry: dict[str, Any] = {
+            "candidateId": candidate.id,
+            "mergedAt": utcnow().isoformat(),
+            "metadata": getattr(candidate, candidate_attribute) or {},
+        }
+        if isinstance(candidate, GraphNode):
+            entry["label"] = candidate.label
+        if candidate.confidence is not None:
+            entry["confidence"] = candidate.confidence
+        if candidate.source_document_id:
+            entry["sourceDocumentId"] = candidate.source_document_id
+        merged.append(entry)
+        provenance["mergedCandidates"] = merged
+        metadata["provenance"] = provenance
+        setattr(target, attribute, metadata)
+
+    def _evidence_for_target(
+        self, target_type: Literal["node", "relationship"], target_id: str
+    ) -> list[GraphEvidence]:
+        column = (
+            GraphEvidence.graph_node_id if target_type == "node" else GraphEvidence.graph_edge_id
+        )
+        return list(self.db.scalars(select(GraphEvidence).where(column == target_id)).all())
+
+    def _move_evidence(
+        self, target_type: Literal["node", "relationship"], from_id: str, to_id: str
+    ) -> None:
+        for evidence in self._evidence_for_target(target_type, from_id):
+            if target_type == "node":
+                evidence.graph_node_id = to_id
+            else:
+                evidence.graph_edge_id = to_id
+
+    def _approved_node(self, course_id: str, node_id: str) -> GraphNode:
+        node = self.db.scalar(
+            select(GraphNode).where(
+                GraphNode.id == node_id,
+                GraphNode.course_id == course_id,
+                GraphNode.archived_at.is_(None),
+                GraphNode.review_status.in_(APPROVED_REVIEW_STATUSES),
+            )
+        )
+        if not node:
+            raise InvalidGraphReference("Merge target must be an approved node in this course")
+        return node
+
+    def merge_node(self, course_id: str, candidate_id: str, target_id: str) -> GraphNode:
+        """Fold a candidate node into an approved node, keeping every piece of provenance."""
+        self.ensure_course(course_id)
+        if candidate_id == target_id:
+            raise InvalidGraphReference("A candidate cannot be merged into itself")
+        candidate = self.get_candidate_node(course_id, candidate_id)
+        target = self._approved_node(course_id, target_id)
+        if not target.description and candidate.description:
+            target.description = candidate.description
+        if candidate.confidence is not None:
+            target.confidence = max(target.confidence or 0.0, candidate.confidence)
+        if target.source_document_id is None and candidate.source_document_id:
+            target.source_document_id = candidate.source_document_id
+            target.source_location = candidate.source_location
+        self._move_evidence("node", candidate_id, target_id)
+        self._record_merge_provenance(target, candidate)
+        self._repoint_relationships(course_id, candidate_id, target_id)
+        merged_at = utcnow()
+        candidate.review_status = ReviewStatus.MERGED
+        candidate.merged_into_node_id = target_id
+        candidate.reviewed_at = merged_at
+        candidate.archived_at = merged_at
+        self.db.flush()
+        return target
+
+    def _repoint_relationships(self, course_id: str, candidate_id: str, target_id: str) -> None:
+        """Move a merged node's relationships onto the target without creating duplicates."""
+        relationships = self.db.scalars(
+            select(GraphEdge).where(
+                GraphEdge.course_id == course_id,
+                GraphEdge.archived_at.is_(None),
+                or_(
+                    GraphEdge.source_node_id == candidate_id,
+                    GraphEdge.target_node_id == candidate_id,
+                ),
+            )
+        ).all()
+        for relationship in relationships:
+            merged_at = utcnow()
+            source_node_id = (
+                target_id
+                if relationship.source_node_id == candidate_id
+                else relationship.source_node_id
+            )
+            target_node_id = (
+                target_id
+                if relationship.target_node_id == candidate_id
+                else relationship.target_node_id
+            )
+            if source_node_id == target_node_id:
+                relationship.review_status = ReviewStatus.MERGED
+                relationship.reviewed_at = merged_at
+                relationship.archived_at = merged_at
+                continue
+            duplicate = self.db.scalar(
+                select(GraphEdge).where(
+                    GraphEdge.course_id == course_id,
+                    GraphEdge.id != relationship.id,
+                    GraphEdge.archived_at.is_(None),
+                    GraphEdge.source_node_id == source_node_id,
+                    GraphEdge.target_node_id == target_node_id,
+                    GraphEdge.type == relationship.type,
+                )
+            )
+            if duplicate is not None:
+                self._move_evidence("relationship", relationship.id, duplicate.id)
+                self._record_merge_provenance(duplicate, relationship)
+                relationship.review_status = ReviewStatus.MERGED
+                relationship.merged_into_edge_id = duplicate.id
+                relationship.reviewed_at = merged_at
+                relationship.archived_at = merged_at
+                continue
+            relationship.source_node_id = source_node_id
+            relationship.target_node_id = target_node_id
+        self.db.flush()
+
+    def merge_relationship(self, course_id: str, candidate_id: str, target_id: str) -> GraphEdge:
+        self.ensure_course(course_id)
+        if candidate_id == target_id:
+            raise InvalidGraphReference("A candidate cannot be merged into itself")
+        candidate = self.get_candidate_relationship(course_id, candidate_id)
+        target = self.db.scalar(
+            select(GraphEdge).where(
+                GraphEdge.id == target_id,
+                GraphEdge.course_id == course_id,
+                GraphEdge.archived_at.is_(None),
+                GraphEdge.review_status.in_(APPROVED_REVIEW_STATUSES),
+            )
+        )
+        if target is None:
+            raise InvalidGraphReference(
+                "Merge target must be an approved relationship in this course"
+            )
+        if candidate.confidence is not None:
+            target.confidence = max(target.confidence or 0.0, candidate.confidence)
+        if target.source_document_id is None and candidate.source_document_id:
+            target.source_document_id = candidate.source_document_id
+            target.source_location = candidate.source_location
+        self._move_evidence("relationship", candidate_id, target_id)
+        self._record_merge_provenance(target, candidate)
+        merged_at = utcnow()
+        candidate.review_status = ReviewStatus.MERGED
+        candidate.merged_into_edge_id = target_id
+        candidate.reviewed_at = merged_at
+        candidate.archived_at = merged_at
+        self.db.flush()
+        return target
+
+    def find_approved_node_by_label(self, course_id: str, label: str) -> GraphNode | None:
+        return self.db.scalar(
+            select(GraphNode).where(
+                GraphNode.course_id == course_id,
+                GraphNode.label == label,
+                GraphNode.archived_at.is_(None),
+                GraphNode.review_status.in_(APPROVED_REVIEW_STATUSES),
+            )
+        )
+
+    def find_approved_relationship(
+        self, course_id: str, source_node_id: str, target_node_id: str, edge_type: GraphEdgeType
+    ) -> GraphEdge | None:
+        return self.db.scalar(
+            select(GraphEdge).where(
+                GraphEdge.course_id == course_id,
+                GraphEdge.source_node_id == source_node_id,
+                GraphEdge.target_node_id == target_node_id,
+                GraphEdge.type == edge_type,
+                GraphEdge.archived_at.is_(None),
+                GraphEdge.review_status.in_(APPROVED_REVIEW_STATUSES),
+            )
+        )
