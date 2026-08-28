@@ -35,6 +35,7 @@ From the repository root:
 pnpm install
 pnpm lint
 pnpm typecheck
+pnpm test
 pnpm build
 
 cd apps/api
@@ -43,5 +44,5 @@ python -m pytest
 python -m ruff check .
 ```
 
-For API changes, add or update tests under `apps/api/tests`. For UI changes, verify the empty, loading, failure, and populated states at mobile and desktop widths.
+For API changes, add or update tests under `apps/api/tests`. For component changes, add or update Vitest tests beside the component. For UI changes, verify the empty, loading, failure, and populated states at mobile and desktop widths.
 
