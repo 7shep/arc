@@ -7,6 +7,8 @@ os.environ["DATABASE_URL"] = os.environ.get(
     "ARC_TEST_DATABASE_URL", "sqlite:///./arc-test.db"
 )
 os.environ.setdefault("UPLOAD_DIR", "./test-uploads")
+# Tests must never spawn a real agent CLI; extraction is exercised with an injected runner.
+os.environ.setdefault("ARC_AUTO_EXTRACT", "0")
 
 from app.config import get_settings  # noqa: E402
 from app.database import Base, engine  # noqa: E402

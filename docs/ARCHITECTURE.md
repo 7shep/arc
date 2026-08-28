@@ -39,6 +39,21 @@ guarantees for labels and relationships apply to approved records alone. Review 
 its dependent candidate relationships without touching approved data, and merging moves evidence,
 relationships, and extraction metadata onto the approved record so provenance survives.
 
+## Automatic extraction boundary
+
+Arc is a model-free application that orchestrates a model the user brings. When a source finishes
+chunking, `app/extraction` renders a command template for an agent CLI found on `PATH`, writes a
+throwaway MCP config exposing only Arc's own server, and spawns the agent as a subprocess. The
+agent reads chunks and writes graph records back through the same MCP tools an external client
+would use, with `ARC_AUTO_APPROVE` set so its writes land in the approved graph directly and fold
+into existing nodes instead of duplicating them.
+
+This keeps three properties: model choice belongs to the user, model cost belongs to the user, and
+Arc's domain boundaries stay the only way graph data is written. It also constrains deployment —
+subscription-authenticated CLIs are per-user and interactive, so this design assumes Arc runs on
+the same machine as the person using it. A hosted Arc would need a different extraction adapter
+behind the same `app/extraction` seam.
+
 ## Graph building workflow
 
 Document ingestion, the MCP extraction tools, the review service, and the workspace form one loop:

@@ -8,6 +8,7 @@ import type {
   CourseDocument,
   CourseGraph,
   DocumentGraph,
+  ExtractionSettings,
 } from "@arc/shared";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -31,7 +32,7 @@ export type CandidateKind = "node" | "relationship";
 const reviewPath = (courseId: string) => `/courses/${courseId}/graph/review`;
 const segment = (kind: CandidateKind) => (kind === "node" ? "nodes" : "relationships");
 
-function send<T>(path: string, method: "POST" | "PATCH", body?: unknown): Promise<T> {
+function send<T>(path: string, method: "POST" | "PATCH" | "PUT", body?: unknown): Promise<T> {
   return request<T>(path, {
     method,
     headers: { "Content-Type": "application/json" },
@@ -46,6 +47,9 @@ export const api = {
   graph: (id: string) => request<CourseGraph>(`/courses/${id}/graph`),
   createCourse: (data: { name: string; code: string; description?: string }) => request<Course>("/courses", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }),
   uploadDocument: (id: string, form: FormData) => request<CourseDocument>(`/courses/${id}/documents`, { method: "POST", body: form }),
+  extractDocument: (id: string, documentId: string) => send<CourseDocument>(`/courses/${id}/documents/${documentId}/extract`, "POST"),
+  extractionSettings: () => request<ExtractionSettings>("/settings/extraction"),
+  updateExtractionSettings: (data: { enabled?: boolean; toolId?: string | null; command?: string }) => send<ExtractionSettings>("/settings/extraction", "PUT", data),
   processDocument: (id: string, documentId: string) => send<CourseDocument>(`/courses/${id}/documents/${documentId}/process`, "POST"),
   documentGraph: (id: string, documentId: string) => request<DocumentGraph>(`/courses/${id}/documents/${documentId}/graph`),
   candidates: (id: string) => request<CandidateQueue>(`${reviewPath(id)}/candidates`),

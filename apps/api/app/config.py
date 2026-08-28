@@ -10,6 +10,7 @@ class Settings:
     upload_dir: Path
     max_upload_size_mb: int
     web_origin: str
+    auto_extract: bool
 
 
 @lru_cache
@@ -22,4 +23,6 @@ def get_settings() -> Settings:
         upload_dir=upload_dir.resolve(),
         max_upload_size_mb=int(os.getenv("MAX_UPLOAD_SIZE_MB", "25")),
         web_origin=os.getenv("WEB_ORIGIN", "http://localhost:3000"),
+        auto_extract=os.getenv("ARC_AUTO_EXTRACT", "1").strip().lower()
+        not in {"0", "false", "no", "off"},
     )

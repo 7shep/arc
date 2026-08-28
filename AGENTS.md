@@ -2,7 +2,9 @@
 
 ## Mission and scope
 
-Arc is a course knowledge system. The current repository is the foundation: courses, source uploads, graph records, and a workspace UI. Do not add LLM providers, embeddings, autonomous agents, authentication, billing, mastery tracking, or a dedicated graph database unless a task explicitly expands scope.
+Arc is a course knowledge system. The current repository is the foundation: courses, source uploads, automatic graph extraction, graph records, and a workspace UI. Do not add embeddings, authentication, billing, mastery tracking, or a dedicated graph database unless a task explicitly expands scope.
+
+Arc never calls a model itself and never holds model credentials. Graph extraction runs by spawning an agent CLI the user has installed and signed in, pointed at Arc's own MCP server. Do not add an LLM SDK or an API-key code path.
 
 ## Architecture boundaries
 
@@ -13,6 +15,7 @@ Arc is a course knowledge system. The current repository is the foundation: cour
 - `apps/api/app/storage`: storage provider contract and local implementation. Never write uploads directly from a route.
 - `apps/api/app/graph`: graph domain types, interface, SQL-backed implementation, and routes. Call the graph abstraction instead of coupling callers to SQL tables.
 - `apps/api/app/review`: candidate review workflow. Promote candidates through `CourseGraph`; never query graph tables here.
+- `apps/api/app/extraction`: agent CLI detection, the command templates, and the subprocess runner. Command templates are data the user can edit in settings, not hard-coded behavior.
 - `apps/api/app/ingestion` and `apps/api/app/agents`: reserved boundaries. Do not add fake implementations.
 - `packages/shared`: dependency-free shared TypeScript contracts.
 
@@ -23,6 +26,7 @@ Arc is a course knowledge system. The current repository is the foundation: cour
 - Validate uploaded extension, MIME type, filename, and configured size limit.
 - Store only generated filenames and relative storage paths; never trust a client path.
 - Keep migrations/schema changes reflected in models, seed data, tests, and docs.
+- Tests must never spawn a real agent CLI; inject a runner and keep `ARC_AUTO_EXTRACT=0` in test setup.
 - A change to an existing table needs an idempotent SQL file in `apps/api/migrations`; tests
   bootstrap SQLite from metadata and will not catch a missing migration.
 - Keep UI copy direct and functional. Use the existing neutral palette and emerald accent; avoid decorative gradients, glass effects, and nested cards.

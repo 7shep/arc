@@ -9,6 +9,12 @@ export const DOCUMENT_TYPES = [
 
 export type DocumentType = (typeof DOCUMENT_TYPES)[number];
 export type ProcessingStatus = "UPLOADED" | "PROCESSING" | "READY" | "FAILED";
+export type ExtractionStatus =
+  | "NOT_STARTED"
+  | "RUNNING"
+  | "COMPLETED"
+  | "FAILED"
+  | "UNAVAILABLE";
 export type GraphNodeType =
   | "CONCEPT"
   | "LECTURE"
@@ -48,6 +54,9 @@ export interface CourseDocument {
   storagePath: string;
   processingStatus: ProcessingStatus;
   processingError: string | null;
+  extractionStatus: ExtractionStatus;
+  extractionError: string | null;
+  extractedAt: string | null;
   chunkCount: number;
   createdAt: string;
   updatedAt: string;
@@ -86,6 +95,25 @@ export interface GraphEdge {
 }
 
 export interface CourseGraph { nodes: GraphNode[]; edges: GraphEdge[] }
+
+export interface AgentTool {
+  id: string;
+  name: string;
+  executable: string;
+  path: string | null;
+  available: boolean;
+  defaultCommand: string;
+  verified: boolean;
+  docsUrl: string;
+}
+
+export interface ExtractionSettings {
+  enabled: boolean;
+  toolId: string | null;
+  command: string | null;
+  commandOverride: string | null;
+  tools: AgentTool[];
+}
 
 export interface DocumentGraph extends CourseGraph {
   documentId: string;
