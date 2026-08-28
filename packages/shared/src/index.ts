@@ -47,6 +47,8 @@ export interface CourseDocument {
   mimeType: string;
   storagePath: string;
   processingStatus: ProcessingStatus;
+  processingError: string | null;
+  chunkCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -84,6 +86,12 @@ export interface GraphEdge {
 }
 
 export interface CourseGraph { nodes: GraphNode[]; edges: GraphEdge[] }
+
+export interface DocumentGraph extends CourseGraph {
+  documentId: string;
+  chunkCount: number;
+  pendingCandidateCount: number;
+}
 
 export interface CandidateEvidence {
   id: string;
